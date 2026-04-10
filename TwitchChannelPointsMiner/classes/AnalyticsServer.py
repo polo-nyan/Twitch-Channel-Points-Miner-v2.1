@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 from threading import Thread
@@ -395,7 +396,6 @@ def config_save():
     backup_path = config_path + ".bak"
     try:
         if os.path.isfile(config_path):
-            import shutil
             shutil.copy2(config_path, backup_path)
     except Exception:
         logger.warning("Failed to create config backup")

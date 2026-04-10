@@ -9,6 +9,8 @@ from TwitchChannelPointsMiner.classes.Settings import Events
 
 logger = logging.getLogger(__name__)
 
+AVATAR_URL = "https://i.imgur.com/X9fEkhT.png"
+
 # Event-specific colors for embeds (decimal color values)
 EVENT_COLORS = {
     "STREAMER_ONLINE": 0x00FF00,   # Green
@@ -145,7 +147,7 @@ class Discord(object):
             "footer": {
                 "text": f"📂 {category}"
                 + (f" • 📺 {channel}" if channel else ""),
-                "icon_url": "https://i.imgur.com/X9fEkhT.png",
+                "icon_url": AVATAR_URL,
             },
         }
 
@@ -153,12 +155,11 @@ class Discord(object):
             embed["author"] = {
                 "name": f"📺 {channel}",
                 "url": f"https://twitch.tv/{channel}",
-                "icon_url": f"https://static-cdn.jtvnw.net/jtv_user_pictures/{channel}-profile_image-70x70.png",
             }
 
         payload = {
             "username": "Twitch Channel Points Miner",
-            "avatar_url": "https://i.imgur.com/X9fEkhT.png",
+            "avatar_url": AVATAR_URL,
             "embeds": [embed],
         }
 

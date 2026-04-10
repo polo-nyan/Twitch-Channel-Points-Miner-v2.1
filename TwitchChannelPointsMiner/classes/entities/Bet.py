@@ -477,7 +477,7 @@ class Bet(object):
         }
 
         # Save original decision so we can restore it
-        original_decision = copy.deepcopy(self.decision)
+        original_decision = dict(self.decision) if self.decision else {}
         original_strategy = self.settings.strategy
 
         for strategy in Strategy:

@@ -415,7 +415,6 @@ $('#endDate').change(() => {
 
 function formatPointsPrefix(points) {
     if (points > 0) return '+';
-    if (points < 0) return '';
     return '';
 }
 
