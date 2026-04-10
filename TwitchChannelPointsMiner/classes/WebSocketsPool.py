@@ -146,7 +146,7 @@ class WebSocketsPool:
                 if dr.result_type == "REFUND"
                 else ("WIN" if dr.result_type == "WIN" else "LOSE")
             )
-            prefix = "+" if dr.points_gained >= 0 else ""
+            prefix = "+" if dr.points_gained > 0 else ""
             dry_run_lines.append(
                 f"  {dr.strategy_name:<15} -> {icon:<6} "
                 f"{prefix}{dr.points_gained}{marker}"

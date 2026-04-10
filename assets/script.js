@@ -413,6 +413,12 @@ $('#endDate').change(() => {
 
 // === DRY RUN STRATEGY COMPARISON === //
 
+function formatPointsPrefix(points) {
+    if (points > 0) return '+';
+    if (points < 0) return '';
+    return '';
+}
+
 function loadDryRunData(streamer) {
     var name = streamer.replace(".json", "");
     $.getJSON(`./dry_run_summary/${name}`, function (summary) {
@@ -450,7 +456,7 @@ function renderDryRunSummary(summary) {
         if (!s.is_active && !s.is_best) statusBadges = '-';
 
         var pointsClass = s.net_points >= 0 ? 'has-text-success' : 'has-text-danger';
-        var pointsPrefix = s.net_points > 0 ? '+' : (s.net_points === 0 ? '±' : '');
+        var pointsPrefix = formatPointsPrefix(s.net_points);
 
         html += '<tr class="' + rowClass + '">';
         html += '<td><strong>' + s.strategy + '</strong></td>';
@@ -502,7 +508,7 @@ function renderDryRunHistory(history) {
 
                 var isActive = s.strategy === pred.active_strategy;
                 var activeMark = isActive ? ' <span class="tag is-warning is-light is-small">ACTIVE</span>' : '';
-                var prefix = s.points_gained > 0 ? '+' : (s.points_gained === 0 ? '±' : '');
+                var prefix = formatPointsPrefix(s.points_gained);
 
                 html += '<span class="dry-run-strategy-item ' + cls + '">';
                 html += icon + ' <strong>' + s.strategy + '</strong>';
