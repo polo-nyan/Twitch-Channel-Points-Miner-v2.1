@@ -37,3 +37,29 @@ a:hover {
     color: #fff;
     background-color: #2B2D3E;
 }
+.dry-run-table,
+.dry-run-table th,
+.dry-run-table td {
+    background-color: #2B2D3E;
+    color: #fff;
+    border-color: #444;
+}
+.dry-run-table thead th {
+    color: #f9826c;
+}
+.dry-run-best {
+    background-color: rgba(54, 181, 53, 0.15) !important;
+}
+.dry-run-active {
+    background-color: rgba(255, 224, 69, 0.12) !important;
+}
+.dry-run-prediction-card {
+    border-color: #444;
+    background-color: #2B2D3E;
+}
+.dry-run-strategy-item {
+    background: rgba(255, 255, 255, 0.05);
+}
+#dry-run-box .title {
+    color: #fff;
+}

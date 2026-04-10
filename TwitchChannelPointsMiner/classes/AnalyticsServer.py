@@ -189,6 +189,100 @@ def streamers():
     )
 
 
+def dry_run(streamer):
+    path = Settings.analytics_path
+    streamer_file = streamer if streamer.endswith(".json") else f"{streamer}.json"
+
+    if not os.path.exists(os.path.join(path, streamer_file)):
+        return Response(
+            json.dumps({"error": f"File '{streamer_file}' not found."}),
+            status=404,
+            mimetype="application/json",
+        )
+
+    try:
+        with open(os.path.join(path, streamer_file), "r") as file:
+            data = json.load(file)
+    except json.JSONDecodeError as e:
+        return Response(
+            json.dumps({"error": f"Error decoding JSON: {str(e)}"}),
+            status=500,
+            mimetype="application/json",
+        )
+
+    results = data.get("dry_run_predictions", [])
+    return Response(
+        json.dumps(results), status=200, mimetype="application/json"
+    )
+
+
+def dry_run_summary(streamer):
+    path = Settings.analytics_path
+    streamer_file = streamer if streamer.endswith(".json") else f"{streamer}.json"
+
+    if not os.path.exists(os.path.join(path, streamer_file)):
+        return Response(
+            json.dumps({"error": f"File '{streamer_file}' not found."}),
+            status=404,
+            mimetype="application/json",
+        )
+
+    try:
+        with open(os.path.join(path, streamer_file), "r") as file:
+            data = json.load(file)
+    except json.JSONDecodeError as e:
+        return Response(
+            json.dumps({"error": f"Error decoding JSON: {str(e)}"}),
+            status=500,
+            mimetype="application/json",
+        )
+
+    predictions = data.get("dry_run_predictions", [])
+    summary = {}
+
+    for pred in predictions:
+        active = pred.get("active_strategy", "")
+        for s in pred.get("strategies", []):
+            name = s.get("strategy", "")
+            if name not in summary:
+                summary[name] = {
+                    "strategy": name,
+                    "total": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "refunds": 0,
+                    "net_points": 0,
+                    "is_active": name == active,
+                }
+            summary[name]["total"] += 1
+            rt = s.get("result_type")
+            if rt == "WIN":
+                summary[name]["wins"] += 1
+            elif rt == "LOSE":
+                summary[name]["losses"] += 1
+            elif rt == "REFUND":
+                summary[name]["refunds"] += 1
+            summary[name]["net_points"] += s.get("points_gained", 0)
+            # Update is_active to the latest
+            summary[name]["is_active"] = name == active
+
+    result = sorted(summary.values(), key=lambda x: x["net_points"], reverse=True)
+
+    # Mark the best performer
+    if result:
+        result[0]["is_best"] = True
+        for r in result[1:]:
+            r["is_best"] = False
+        for r in result:
+            r["win_rate"] = (
+                round(r["wins"] / max(r["total"] - r["refunds"], 1) * 100, 1)
+            )
+
+    return Response(
+        json.dumps(result), status=200, mimetype="application/json"
+    )
+
+
 def download_assets(assets_folder, required_files):
     Path(assets_folder).mkdir(parents=True, exist_ok=True)
     logger.info(f"Downloading assets to {assets_folder}")
@@ -285,6 +379,18 @@ class AnalyticsServer(Thread):
                               json_all, methods=["GET"])
         self.app.add_url_rule(
             "/log", "log", generate_log, methods=["GET"])
+        self.app.add_url_rule(
+            "/dry_run/<string:streamer>",
+            "dry_run",
+            dry_run,
+            methods=["GET"],
+        )
+        self.app.add_url_rule(
+            "/dry_run_summary/<string:streamer>",
+            "dry_run_summary",
+            dry_run_summary,
+            methods=["GET"],
+        )
 
     def run(self):
         logger.info(
