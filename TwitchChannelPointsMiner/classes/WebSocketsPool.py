@@ -91,6 +91,82 @@ class WebSocketsPool:
             self.ws[index].close()
 
     @staticmethod
+    def _score_dry_run(event_prediction, streamer):
+        """Score all dry-run strategy results after a prediction resolves."""
+        if not event_prediction.dry_run_results:
+            return
+
+        result_type = event_prediction.result.get("type")
+        if not result_type:
+            return
+
+        actual_choice = event_prediction.bet.decision.get("choice")
+        bet = event_prediction.bet
+        num_outcomes = len(bet.outcomes)
+
+        # Determine the winning outcome index
+        if result_type == "REFUND":
+            winning_index = None
+        elif result_type == "WIN":
+            winning_index = actual_choice
+        else:
+            # LOSE: for 2-outcome events the winner is the other outcome
+            if num_outcomes == 2:
+                winning_index = 1 - actual_choice if actual_choice is not None else None
+            else:
+                winning_index = None  # Cannot determine for >2 outcomes
+
+        active_strategy = str(bet.settings.strategy)
+        dry_run_lines = [
+            f'[DRY RUN RESULTS] "{event_prediction.title}":'
+        ]
+
+        for dr in event_prediction.dry_run_results:
+            if result_type == "REFUND":
+                dr.result_type = "REFUND"
+                dr.points_gained = 0
+            elif winning_index is not None and dr.choice == winning_index:
+                dr.result_type = "WIN"
+                # Calculate winnings using the odds for the chosen outcome
+                odds = bet.outcomes[dr.choice].get("odds", 0)
+                dr.points_gained = int(dr.amount * odds) - dr.amount if odds else 0
+            elif winning_index is not None:
+                dr.result_type = "LOSE"
+                dr.points_gained = -dr.amount
+            else:
+                # >2 outcomes and LOSE: we cannot determine winner
+                dr.result_type = "LOSE"
+                dr.points_gained = -dr.amount
+
+            marker = " <-- ACTIVE" if dr.strategy_name == active_strategy else ""
+            icon = (
+                "REFUND"
+                if dr.result_type == "REFUND"
+                else ("WIN" if dr.result_type == "WIN" else "LOSE")
+            )
+            prefix = "+" if dr.points_gained >= 0 else ""
+            dry_run_lines.append(
+                f"  {dr.strategy_name:<15} -> {icon:<6} "
+                f"{prefix}{dr.points_gained}{marker}"
+            )
+
+        logger.info(
+            "\n".join(dry_run_lines),
+            extra={
+                "emoji": ":crystal_ball:",
+                "event": Events.BET_DRY_RUN,
+            },
+        )
+
+        # Persist dry-run results to analytics
+        if Settings.enable_analytics is True:
+            streamer.persistent_dry_run(
+                event_prediction.title,
+                active_strategy,
+                event_prediction.dry_run_results,
+            )
+
+    @staticmethod
     def on_open(ws):
         def run():
             ws.is_opened = True
@@ -392,6 +468,19 @@ class WebSocketsPool:
                                             event_prediction.result["type"],
                                             f"{ws.events_predictions[event_id].title}",
                                         )
+
+                                # Score dry-run results
+                                try:
+                                    WebSocketsPool._score_dry_run(
+                                        event_prediction,
+                                        ws.streamers[streamer_index],
+                                    )
+                                except Exception:
+                                    logger.debug(
+                                        "Failed to score dry-run results",
+                                        exc_info=True,
+                                    )
+
                             elif message.type == "prediction-made":
                                 event_prediction.bet_confirmed = True
                                 # Analytics switch

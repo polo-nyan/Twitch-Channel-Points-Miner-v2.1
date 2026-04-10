@@ -38,6 +38,7 @@ class Events(Enum):
     BET_GENERAL = auto()
     BET_FAILED = auto()
     BET_START = auto()
+    BET_DRY_RUN = auto()
     BONUS_CLAIM = auto()
     MOMENT_CLAIM = auto()
     JOIN_RAID = auto()

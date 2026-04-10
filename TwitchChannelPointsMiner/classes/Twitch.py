@@ -700,6 +700,32 @@ class Twitch(object):
         decision = event.bet.calculate(event.streamer.channel_points)
         # selector_index = 0 if decision["choice"] == "A" else 1
 
+        # Run dry-run for all strategies
+        try:
+            event.dry_run_results = event.bet.dry_run_all_strategies(
+                event.streamer.channel_points
+            )
+            active_strategy = str(event.bet.settings.strategy)
+            dry_run_lines = [
+                f"[DRY RUN] Strategy comparison for \"{event.title}\":"
+            ]
+            for dr in event.dry_run_results:
+                marker = " <-- ACTIVE" if dr.strategy_name == active_strategy else ""
+                dry_run_lines.append(
+                    f"  {dr.strategy_name:<15} -> Outcome {dr.choice}: "
+                    f"\"{dr.outcome_title}\" ({dr.outcome_color}) "
+                    f"- {_millify(dr.amount)} pts{marker}"
+                )
+            logger.info(
+                "\n".join(dry_run_lines),
+                extra={
+                    "emoji": ":crystal_ball:",
+                    "event": Events.BET_DRY_RUN,
+                },
+            )
+        except Exception:
+            logger.debug("Failed to run dry-run predictions", exc_info=True)
+
         logger.info(
             f"Going to complete bet for {event}",
             extra={

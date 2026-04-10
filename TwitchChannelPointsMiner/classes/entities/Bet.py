@@ -27,6 +27,52 @@ class Strategy(Enum):
         return self.name
 
 
+class DryRunResult(object):
+    __slots__ = [
+        "strategy_name",
+        "choice",
+        "amount",
+        "outcome_title",
+        "outcome_color",
+        "result_type",
+        "points_gained",
+    ]
+
+    def __init__(
+        self,
+        strategy_name,
+        choice,
+        amount,
+        outcome_title="",
+        outcome_color="",
+    ):
+        self.strategy_name = strategy_name
+        self.choice = choice
+        self.amount = amount
+        self.outcome_title = outcome_title
+        self.outcome_color = outcome_color
+        self.result_type = None
+        self.points_gained = 0
+
+    def __repr__(self):
+        return (
+            f"DryRunResult(strategy={self.strategy_name}, "
+            f"choice={self.choice}, amount={self.amount}, "
+            f"outcome={self.outcome_title})"
+        )
+
+    def to_dict(self):
+        return {
+            "strategy": self.strategy_name,
+            "choice": self.choice,
+            "amount": self.amount,
+            "outcome_title": self.outcome_title,
+            "outcome_color": self.outcome_color,
+            "result_type": self.result_type,
+            "points_gained": self.points_gained,
+        }
+
+
 class Condition(Enum):
     GT = auto()
     LT = auto()
@@ -343,3 +389,49 @@ class Bet(object):
                 )
             self.decision["amount"] = int(self.decision["amount"])
         return self.decision
+
+    def dry_run_all_strategies(self, balance):
+        results = []
+        # Skip NUMBER_X strategies that reference non-existent outcomes
+        num_outcomes = len(self.outcomes)
+        number_strategies = {
+            Strategy.NUMBER_1: 0,
+            Strategy.NUMBER_2: 1,
+            Strategy.NUMBER_3: 2,
+            Strategy.NUMBER_4: 3,
+            Strategy.NUMBER_5: 4,
+            Strategy.NUMBER_6: 5,
+            Strategy.NUMBER_7: 6,
+            Strategy.NUMBER_8: 7,
+        }
+
+        # Save original decision so we can restore it
+        original_decision = copy.deepcopy(self.decision)
+        original_strategy = self.settings.strategy
+
+        for strategy in Strategy:
+            # Skip NUMBER_X strategies that exceed available outcomes
+            if strategy in number_strategies:
+                if number_strategies[strategy] >= num_outcomes:
+                    continue
+
+            self.settings.strategy = strategy
+            self.decision = {"choice": None, "amount": 0, "id": None}
+            self.calculate(balance)
+
+            if self.decision["choice"] is not None:
+                idx = self.decision["choice"]
+                result = DryRunResult(
+                    strategy_name=str(strategy),
+                    choice=idx,
+                    amount=self.decision["amount"],
+                    outcome_title=self.outcomes[idx].get("title", ""),
+                    outcome_color=self.outcomes[idx].get("color", ""),
+                )
+                results.append(result)
+
+        # Restore original state
+        self.settings.strategy = original_strategy
+        self.decision = original_decision
+
+        return results
