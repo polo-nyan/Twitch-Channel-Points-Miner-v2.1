@@ -302,10 +302,126 @@ def download_assets(assets_folder, required_files):
                 logger.info(f"Downloaded {f}")
 
 
+def config_editor_page():
+    return render_template("config_editor.html")
+
+
+def config_read():
+    """Read the current run.py config file."""
+    config_path = os.path.join(Path().absolute(), "run.py")
+    if not os.path.isfile(config_path):
+        # Try example.py as fallback
+        config_path = os.path.join(Path().absolute(), "example.py")
+    if not os.path.isfile(config_path):
+        return Response(
+            json.dumps({"error": "No config file found (run.py or example.py)."}),
+            status=404,
+            mimetype="application/json",
+        )
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return Response(
+            json.dumps({"content": content, "path": config_path}),
+            status=200,
+            mimetype="application/json",
+        )
+    except Exception:
+        return Response(
+            json.dumps({"error": "Failed to read config file."}),
+            status=500,
+            mimetype="application/json",
+        )
+
+
+def config_validate():
+    """Validate Python syntax of submitted config content."""
+    data = request.get_json(silent=True)
+    if not data or "content" not in data:
+        return Response(
+            json.dumps({"valid": False, "error": "No content provided."}),
+            status=400,
+            mimetype="application/json",
+        )
+    content = data["content"]
+    try:
+        compile(content, "<config>", "exec")
+        return Response(
+            json.dumps({"valid": True}),
+            status=200,
+            mimetype="application/json",
+        )
+    except SyntaxError as e:
+        return Response(
+            json.dumps({
+                "valid": False,
+                "error": f"Line {e.lineno}: {e.msg}",
+                "lineno": e.lineno,
+            }),
+            status=200,
+            mimetype="application/json",
+        )
+
+
+def config_save():
+    """Save config after validation, creating a backup first."""
+    data = request.get_json(silent=True)
+    if not data or "content" not in data:
+        return Response(
+            json.dumps({"success": False, "error": "No content provided."}),
+            status=400,
+            mimetype="application/json",
+        )
+    content = data["content"]
+
+    # Syntax check first
+    try:
+        compile(content, "<config>", "exec")
+    except SyntaxError as e:
+        return Response(
+            json.dumps({
+                "success": False,
+                "error": f"Syntax error on line {e.lineno}: {e.msg}",
+            }),
+            status=400,
+            mimetype="application/json",
+        )
+
+    config_path = os.path.join(Path().absolute(), "run.py")
+    if not os.path.isfile(config_path):
+        config_path = os.path.join(Path().absolute(), "example.py")
+
+    # Create backup
+    backup_path = config_path + ".bak"
+    try:
+        if os.path.isfile(config_path):
+            import shutil
+            shutil.copy2(config_path, backup_path)
+    except Exception:
+        logger.warning("Failed to create config backup")
+
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        logger.info("Config file saved via web editor")
+        return Response(
+            json.dumps({"success": True, "path": config_path}),
+            status=200,
+            mimetype="application/json",
+        )
+    except Exception:
+        return Response(
+            json.dumps({"success": False, "error": "Failed to write config file."}),
+            status=500,
+            mimetype="application/json",
+        )
+
+
 def check_assets():
     required_files = [
         "banner.png",
         "charts.html",
+        "config_editor.html",
         "script.js",
         "style.css",
         "dark-theme.css",
@@ -395,6 +511,30 @@ class AnalyticsServer(Thread):
             "dry_run_summary",
             dry_run_summary,
             methods=["GET"],
+        )
+        self.app.add_url_rule(
+            "/config",
+            "config_editor",
+            config_editor_page,
+            methods=["GET"],
+        )
+        self.app.add_url_rule(
+            "/api/config",
+            "config_read",
+            config_read,
+            methods=["GET"],
+        )
+        self.app.add_url_rule(
+            "/api/config/validate",
+            "config_validate",
+            config_validate,
+            methods=["POST"],
+        )
+        self.app.add_url_rule(
+            "/api/config/save",
+            "config_save",
+            config_save,
+            methods=["POST"],
         )
 
     def run(self):

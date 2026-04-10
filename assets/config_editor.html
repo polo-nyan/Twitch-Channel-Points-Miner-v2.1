@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Config Editor - Twitch Channel Points Miner</title>
+    <link rel="icon" type="image/png" sizes="32x32"
+        href="https://static.twitchcdn.net/assets/favicon-32-e29e246c157142c94346.png">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.6.1/css/bulma.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #343E59;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        }
+        .editor-container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .editor-header h1 {
+            color: #f9826c;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .editor-header a {
+            color: #87CEEB;
+            text-decoration: none;
+        }
+        .editor-header a:hover {
+            text-decoration: underline;
+        }
+        .editor-toolbar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            align-items: center;
+        }
+        .editor-toolbar .btn {
+            padding: 0.4rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+        .editor-toolbar .btn:hover {
+            opacity: 0.85;
+        }
+        .btn-save {
+            background-color: #00d1b2;
+            color: #fff;
+        }
+        .btn-validate {
+            background-color: #3273dc;
+            color: #fff;
+        }
+        .btn-revert {
+            background-color: #ff3860;
+            color: #fff;
+        }
+        .status-bar {
+            flex: 1;
+            text-align: right;
+            font-size: 0.85rem;
+        }
+        .status-ok {
+            color: #00d1b2;
+        }
+        .status-error {
+            color: #ff3860;
+        }
+        .status-info {
+            color: #ffdd57;
+        }
+        #config-editor {
+            width: 100%;
+            min-height: 600px;
+            background: #1e2233;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: "Fira Code", "Consolas", "Monaco", monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            tab-size: 4;
+            resize: vertical;
+            white-space: pre;
+            overflow-wrap: normal;
+            overflow-x: auto;
+        }
+        #config-editor:focus {
+            outline: 2px solid #f9826c;
+            border-color: #f9826c;
+        }
+        .line-info {
+            color: #888;
+            font-size: 0.8rem;
+            margin-top: 0.3rem;
+        }
+        .help-section {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: #2B2D3E;
+            border-radius: 6px;
+            border: 1px solid #444;
+        }
+        .help-section h3 {
+            color: #f9826c;
+            margin-bottom: 0.5rem;
+        }
+        .help-section ul {
+            list-style: disc;
+            margin-left: 1.5rem;
+            color: #ccc;
+        }
+        .help-section li {
+            margin-bottom: 0.3rem;
+        }
+        .help-section code {
+            background: #1e2233;
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            color: #f9826c;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="editor-container">
+        <div class="editor-header">
+            <h1><i class="fas fa-cog"></i> Config Editor</h1>
+            <a href="/"><i class="fas fa-chart-area"></i> Back to Dashboard</a>
+        </div>
+
+        <div class="editor-toolbar">
+            <button class="btn btn-validate" onclick="validateConfig()">
+                <i class="fas fa-check-circle"></i> Validate
+            </button>
+            <button class="btn btn-save" onclick="saveConfig()">
+                <i class="fas fa-save"></i> Save
+            </button>
+            <button class="btn btn-revert" onclick="revertConfig()">
+                <i class="fas fa-undo"></i> Revert
+            </button>
+            <div class="status-bar" id="status-bar">
+                <span class="status-info">Loading config...</span>
+            </div>
+        </div>
+
+        <textarea id="config-editor" spellcheck="false"></textarea>
+        <div class="line-info" id="line-info">Line 1, Column 1</div>
+
+        <div class="help-section">
+            <h3><i class="fas fa-info-circle"></i> Quick Reference</h3>
+            <ul>
+                <li>Edit your <code>run.py</code> config file directly in the browser</li>
+                <li><strong>Validate</strong> checks Python syntax before saving</li>
+                <li><strong>Save</strong> creates a <code>.bak</code> backup, validates, then writes</li>
+                <li><strong>Revert</strong> reloads the file from disk, discarding unsaved changes</li>
+                <li>Available strategies: <code>SMART</code>, <code>MOST_VOTED</code>, <code>HIGH_ODDS</code>,
+                    <code>PERCENTAGE</code>, <code>SMART_MONEY</code>, <code>HISTORICAL</code>,
+                    <code>NUMBER_1</code>–<code>NUMBER_8</code></li>
+                <li>Discord muting: <code>muted_channels=["streamer"]</code>,
+                    <code>muted_events_per_channel={"streamer": [Events.BET_LOSE]}</code>,
+                    <code>global_muted_events=[Events.GAIN_FOR_WATCH]</code></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        var originalContent = '';
+        var editor = document.getElementById('config-editor');
+        var statusBar = document.getElementById('status-bar');
+        var lineInfo = document.getElementById('line-info');
+
+        // Load config on page load
+        fetch('/api/config')
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    statusBar.innerHTML = '<span class="status-error">' + data.error + '</span>';
+                    return;
+                }
+                editor.value = data.content;
+                originalContent = data.content;
+                statusBar.innerHTML = '<span class="status-ok">✓ Loaded: ' + data.path + '</span>';
+            })
+            .catch(() => {
+                statusBar.innerHTML = '<span class="status-error">Failed to load config</span>';
+            });
+
+        // Update line/column info
+        editor.addEventListener('keyup', updateLineInfo);
+        editor.addEventListener('click', updateLineInfo);
+
+        function updateLineInfo() {
+            var val = editor.value.substring(0, editor.selectionStart);
+            var line = val.split('\n').length;
+            var col = val.split('\n').pop().length + 1;
+            lineInfo.textContent = 'Line ' + line + ', Column ' + col;
+        }
+
+        // Tab key support
+        editor.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                var start = this.selectionStart;
+                var end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + '    ' + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 4;
+            }
+        });
+
+        function validateConfig() {
+            statusBar.innerHTML = '<span class="status-info">Validating...</span>';
+            fetch('/api/config/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: editor.value })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.valid) {
+                    statusBar.innerHTML = '<span class="status-ok">✓ Syntax valid</span>';
+                } else {
+                    statusBar.innerHTML = '<span class="status-error">✗ ' + data.error + '</span>';
+                    if (data.lineno) {
+                        goToLine(data.lineno);
+                    }
+                }
+            })
+            .catch(() => {
+                statusBar.innerHTML = '<span class="status-error">Validation request failed</span>';
+            });
+        }
+
+        function saveConfig() {
+            statusBar.innerHTML = '<span class="status-info">Saving...</span>';
+            fetch('/api/config/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: editor.value })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    originalContent = editor.value;
+                    statusBar.innerHTML = '<span class="status-ok">✓ Saved to ' + data.path + '</span>';
+                } else {
+                    statusBar.innerHTML = '<span class="status-error">✗ ' + data.error + '</span>';
+                }
+            })
+            .catch(() => {
+                statusBar.innerHTML = '<span class="status-error">Save request failed</span>';
+            });
+        }
+
+        function revertConfig() {
+            if (editor.value !== originalContent) {
+                if (!confirm('Discard unsaved changes and reload from disk?')) return;
+            }
+            fetch('/api/config')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.content) {
+                        editor.value = data.content;
+                        originalContent = data.content;
+                        statusBar.innerHTML = '<span class="status-ok">✓ Reverted to saved version</span>';
+                    }
+                });
+        }
+
+        function goToLine(lineNum) {
+            var lines = editor.value.split('\n');
+            var pos = 0;
+            for (var i = 0; i < lineNum - 1 && i < lines.length; i++) {
+                pos += lines[i].length + 1;
+            }
+            editor.focus();
+            editor.selectionStart = pos;
+            editor.selectionEnd = pos + (lines[lineNum - 1] || '').length;
+        }
+
+        // Warn on unsaved changes
+        window.addEventListener('beforeunload', function(e) {
+            if (editor.value !== originalContent) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+    </script>
+</body>
+</html>
