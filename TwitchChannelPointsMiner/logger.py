@@ -330,7 +330,7 @@ def configure_loggers(username, settings):
             )
         else:
             # Getting time zone from the console_handler's formatter since they are the same
-            tz = "" if console_handler.formatter.timezone is False else console_handler.formatter.timezone
+            tz = None if console_handler.formatter.timezone is None else console_handler.formatter.timezone
             logs_file = os.path.join(
                 logs_path,
                 f"{username}.{datetime.now(tz).strftime('%Y%m%d-%H%M%S')}.log",

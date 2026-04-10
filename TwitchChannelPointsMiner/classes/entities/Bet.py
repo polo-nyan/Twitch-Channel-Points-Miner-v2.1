@@ -4,7 +4,6 @@ from random import uniform
 
 from millify import millify
 
-#from TwitchChannelPointsMiner.utils import char_decision_as_index, float_round
 from TwitchChannelPointsMiner.utils import float_round
 
 
@@ -231,13 +230,11 @@ class Bet(object):
                     (100 * self.outcomes[index][OutcomeKeys.TOTAL_USERS]) / self.total_users
                 )
                 self.outcomes[index][OutcomeKeys.ODDS] = float_round(
-                    #self.total_points / max(self.outcomes[index][OutcomeKeys.TOTAL_POINTS], 1)
                     0
                     if self.outcomes[index][OutcomeKeys.TOTAL_POINTS] == 0
                     else self.total_points / self.outcomes[index][OutcomeKeys.TOTAL_POINTS]
                 )
                 self.outcomes[index][OutcomeKeys.ODDS_PERCENTAGE] = float_round(
-                    #100 / max(self.outcomes[index][OutcomeKeys.ODDS], 1)
                     0
                     if self.outcomes[index][OutcomeKeys.ODDS] == 0
                     else 100 / self.outcomes[index][OutcomeKeys.ODDS]
@@ -249,7 +246,6 @@ class Bet(object):
         return f"Bet(total_users={millify(self.total_users)}, total_points={millify(self.total_points)}), decision={self.decision})\n\t\tOutcome A({self.get_outcome(0)})\n\t\tOutcome B({self.get_outcome(1)})"
 
     def get_decision(self, parsed=False):
-        #decision = self.outcomes[0 if self.decision["choice"] == "A" else 1]
         decision = self.outcomes[self.decision["choice"]]
         return decision if parsed is False else Bet.__parse_outcome(decision)
 
@@ -284,9 +280,6 @@ class Bet(object):
             ]:
                 if key not in self.outcomes[index]:
                     self.outcomes[index][key] = 0
-
-    '''def __return_choice(self, key) -> str:
-        return "A" if self.outcomes[0][key] > self.outcomes[1][key] else "B"'''
 
     def __return_choice(self, key) -> int:
         largest=0
@@ -364,7 +357,7 @@ class Bet(object):
                 best = i
         return best
 
-    def skip(self) -> bool:
+    def skip(self) -> tuple:
         if self.settings.filter_condition is not None:
             # key == by , condition == where
             key = self.settings.filter_condition.by
@@ -381,7 +374,6 @@ class Bet(object):
                     self.outcomes[0][fixed_key] + self.outcomes[1][fixed_key]
                 )
             else:
-                #outcome_index = char_decision_as_index(self.decision["choice"])
                 outcome_index = self.decision["choice"]
                 compared_value = self.outcomes[outcome_index][fixed_key]
 
@@ -442,7 +434,6 @@ class Bet(object):
             self.decision["choice"] = self.__historical_choice()
 
         if self.decision["choice"] is not None:
-            #index = char_decision_as_index(self.decision["choice"])
             index = self.decision["choice"]
             self.decision["id"] = self.outcomes[index]["id"]
             self.decision["amount"] = min(

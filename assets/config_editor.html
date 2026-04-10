@@ -184,20 +184,28 @@
         var statusBar = document.getElementById('status-bar');
         var lineInfo = document.getElementById('line-info');
 
+        function setStatus(cls, text) {
+            statusBar.textContent = '';
+            var span = document.createElement('span');
+            span.className = cls;
+            span.textContent = text;
+            statusBar.appendChild(span);
+        }
+
         // Load config on page load
         fetch('/api/config')
             .then(r => r.json())
             .then(data => {
                 if (data.error) {
-                    statusBar.innerHTML = '<span class="status-error">' + data.error + '</span>';
+                    setStatus('status-error', data.error);
                     return;
                 }
                 editor.value = data.content;
                 originalContent = data.content;
-                statusBar.innerHTML = '<span class="status-ok">✓ Loaded: ' + data.path + '</span>';
+                setStatus('status-ok', '✓ Loaded: ' + data.path);
             })
             .catch(() => {
-                statusBar.innerHTML = '<span class="status-error">Failed to load config</span>';
+                setStatus('status-error', 'Failed to load config');
             });
 
         // Update line/column info
@@ -223,7 +231,7 @@
         });
 
         function validateConfig() {
-            statusBar.innerHTML = '<span class="status-info">Validating...</span>';
+            setStatus('status-info', 'Validating...');
             fetch('/api/config/validate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -232,21 +240,21 @@
             .then(r => r.json())
             .then(data => {
                 if (data.valid) {
-                    statusBar.innerHTML = '<span class="status-ok">✓ Syntax valid</span>';
+                    setStatus('status-ok', '✓ Syntax valid');
                 } else {
-                    statusBar.innerHTML = '<span class="status-error">✗ ' + data.error + '</span>';
+                    setStatus('status-error', '✗ ' + data.error);
                     if (data.lineno) {
                         goToLine(data.lineno);
                     }
                 }
             })
             .catch(() => {
-                statusBar.innerHTML = '<span class="status-error">Validation request failed</span>';
+                setStatus('status-error', 'Validation request failed');
             });
         }
 
         function saveConfig() {
-            statusBar.innerHTML = '<span class="status-info">Saving...</span>';
+            setStatus('status-info', 'Saving...');
             fetch('/api/config/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -256,13 +264,13 @@
             .then(data => {
                 if (data.success) {
                     originalContent = editor.value;
-                    statusBar.innerHTML = '<span class="status-ok">✓ Saved to ' + data.path + '</span>';
+                    setStatus('status-ok', '✓ Saved to ' + data.path);
                 } else {
-                    statusBar.innerHTML = '<span class="status-error">✗ ' + data.error + '</span>';
+                    setStatus('status-error', '✗ ' + data.error);
                 }
             })
             .catch(() => {
-                statusBar.innerHTML = '<span class="status-error">Save request failed</span>';
+                setStatus('status-error', 'Save request failed');
             });
         }
 
@@ -276,7 +284,7 @@
                     if (data.content) {
                         editor.value = data.content;
                         originalContent = data.content;
-                        statusBar.innerHTML = '<span class="status-ok">✓ Reverted to saved version</span>';
+                        setStatus('status-ok', '✓ Reverted to saved version');
                     }
                 });
         }

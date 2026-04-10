@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,30 @@ from TwitchChannelPointsMiner.utils import download_file
 
 cli.show_server_banner = lambda *_: None
 logger = logging.getLogger(__name__)
+
+
+# Patterns that should not appear in a config file
+_DANGEROUS_PATTERNS = [
+    (r"\bos\.system\b", "os.system() call"),
+    (r"\bsubprocess\b", "subprocess module usage"),
+    (r"\b__import__\b", "__import__() call"),
+    (r"\beval\s*\(", "eval() call"),
+    (r"\bexec\s*\(", "exec() call"),
+    (r"\bcompile\s*\(", "compile() call"),
+    (r"\bglobals\s*\(", "globals() call"),
+    (r"\bos\.remove\b", "os.remove() call"),
+    (r"\bshutil\.rmtree\b", "shutil.rmtree() call"),
+]
+
+
+def _check_dangerous_patterns(content: str):
+    """Return a warning string if dangerous code is found, else None."""
+    for pattern, desc in _DANGEROUS_PATTERNS:
+        match = re.search(pattern, content)
+        if match:
+            line_num = content[: match.start()].count("\n") + 1
+            return f"Potentially dangerous code on line {line_num}: {desc}"
+    return None
 
 
 def streamers_available():
@@ -345,6 +370,16 @@ def config_validate():
             mimetype="application/json",
         )
     content = data["content"]
+
+    # Check for dangerous patterns first
+    danger = _check_dangerous_patterns(content)
+    if danger:
+        return Response(
+            json.dumps({"valid": False, "error": danger}),
+            status=200,
+            mimetype="application/json",
+        )
+
     try:
         compile(content, "<config>", "exec")
         return Response(
@@ -374,6 +409,15 @@ def config_save():
             mimetype="application/json",
         )
     content = data["content"]
+
+    # Safety check for dangerous patterns
+    danger = _check_dangerous_patterns(content)
+    if danger:
+        return Response(
+            json.dumps({"success": False, "error": danger}),
+            status=400,
+            mimetype="application/json",
+        )
 
     # Syntax check first
     try:
@@ -415,6 +459,35 @@ def config_save():
             status=500,
             mimetype="application/json",
         )
+
+
+_server_start_time = None
+
+
+def health():
+    """Return basic health status of the miner."""
+    import time
+
+    uptime = None
+    if _server_start_time is not None:
+        uptime = int(time.time() - _server_start_time)
+
+    path = Settings.analytics_path
+    streamer_count = 0
+    try:
+        streamer_count = len(streamers_available())
+    except Exception:
+        pass
+
+    return Response(
+        json.dumps({
+            "status": "ok",
+            "uptime_seconds": uptime,
+            "streamers_tracked": streamer_count,
+        }),
+        status=200,
+        mimetype="application/json",
+    )
 
 
 def check_assets():
@@ -536,8 +609,18 @@ class AnalyticsServer(Thread):
             config_save,
             methods=["POST"],
         )
+        self.app.add_url_rule(
+            "/health",
+            "health",
+            health,
+            methods=["GET"],
+        )
 
     def run(self):
+        global _server_start_time
+        import time
+
+        _server_start_time = time.time()
         logger.info(
             f"Analytics running on http://{self.host}:{self.port}/",
             extra={"emoji": ":globe_with_meridians:"},

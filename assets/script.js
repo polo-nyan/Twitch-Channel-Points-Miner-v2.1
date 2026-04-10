@@ -115,7 +115,7 @@ $(document).ready(function () {
         if (isLogCheckboxChecked) {
             $.get(`/log?lastIndex=${lastReceivedLogIndex}`, function (data) {
                 // Process and display the new log entries received
-                $("#log-content").append(data);
+                $("#log-content").append(document.createTextNode(data));
                 // Scroll to the bottom of the log content
                 $("#log-content").scrollTop($("#log-content")[0].scrollHeight);
 

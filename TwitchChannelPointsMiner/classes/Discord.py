@@ -170,5 +170,5 @@ class Discord(object):
             )
             if resp.status_code == 429:
                 logger.warning("Discord rate limited, message may be delayed")
-        except Exception:
-            logger.debug("Failed to send Discord embed", exc_info=True)
+        except requests.RequestException:
+            logger.warning("Failed to send Discord embed", exc_info=True)

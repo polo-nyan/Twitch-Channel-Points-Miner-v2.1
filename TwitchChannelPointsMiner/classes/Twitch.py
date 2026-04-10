@@ -694,9 +694,6 @@ class Twitch(object):
             if streamer.settings.community_goals is True:
                 self.contribute_to_community_goals(streamer)
 
-            if streamer.settings.community_goals is True:
-                self.contribute_to_community_goals(streamer)
-
     def _load_historical_outcomes(self, event):
         """Load historical dry_run_predictions for the HISTORICAL strategy."""
         if event.bet.settings.strategy != Strategy.HISTORICAL:
@@ -715,18 +712,19 @@ class Twitch(object):
             event.bet.settings.historical_outcomes = data.get(
                 "dry_run_predictions", []
             )
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(
+                f"Failed to load historical outcomes for {streamer.username}: {e}"
+            )
 
     def make_predictions(self, event):
         # Load historical outcomes for the HISTORICAL strategy
         try:
             self._load_historical_outcomes(event)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not load historical outcomes: {e}")
 
         decision = event.bet.calculate(event.streamer.channel_points)
-        # selector_index = 0 if decision["choice"] == "A" else 1
 
         # Run dry-run for all strategies
         try:
@@ -781,7 +779,6 @@ class Twitch(object):
             else:
                 if decision["amount"] >= 10:
                     logger.info(
-                        # f"Place {_millify(decision['amount'])} channel points on: {event.bet.get_outcome(selector_index)}",
                         f"Place {_millify(decision['amount'])} channel points on: {event.bet.get_outcome(decision['choice'])}",
                         extra={
                             "emoji": ":four_leaf_clover:",
