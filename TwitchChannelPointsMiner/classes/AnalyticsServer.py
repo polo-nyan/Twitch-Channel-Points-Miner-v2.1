@@ -203,9 +203,10 @@ def dry_run(streamer):
     try:
         with open(os.path.join(path, streamer_file), "r") as file:
             data = json.load(file)
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
+        logger.error(f"Error decoding JSON in file '{streamer_file}'")
         return Response(
-            json.dumps({"error": f"Error decoding JSON: {str(e)}"}),
+            json.dumps({"error": "Error decoding analytics data."}),
             status=500,
             mimetype="application/json",
         )
@@ -230,9 +231,10 @@ def dry_run_summary(streamer):
     try:
         with open(os.path.join(path, streamer_file), "r") as file:
             data = json.load(file)
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
+        logger.error(f"Error decoding JSON in file '{streamer_file}'")
         return Response(
-            json.dumps({"error": f"Error decoding JSON: {str(e)}"}),
+            json.dumps({"error": "Error decoding analytics data."}),
             status=500,
             mimetype="application/json",
         )
@@ -274,8 +276,11 @@ def dry_run_summary(streamer):
         for r in result[1:]:
             r["is_best"] = False
         for r in result:
+            resolved = r["total"] - r["refunds"]
             r["win_rate"] = (
-                round(r["wins"] / max(r["total"] - r["refunds"], 1) * 100, 1)
+                round(r["wins"] / resolved * 100, 1)
+                if resolved > 0
+                else 0.0
             )
 
     return Response(

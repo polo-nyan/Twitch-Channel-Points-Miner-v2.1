@@ -129,7 +129,9 @@ class WebSocketsPool:
                 dr.result_type = "WIN"
                 # Calculate winnings using the odds for the chosen outcome
                 odds = bet.outcomes[dr.choice].get("odds", 0)
-                dr.points_gained = int(dr.amount * odds) - dr.amount if odds else 0
+                dr.points_gained = (
+                    round(dr.amount * odds) - dr.amount if odds else 0
+                )
             elif winning_index is not None:
                 dr.result_type = "LOSE"
                 dr.points_gained = -dr.amount

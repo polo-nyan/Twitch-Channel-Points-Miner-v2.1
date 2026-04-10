@@ -450,14 +450,14 @@ function renderDryRunSummary(summary) {
         if (!s.is_active && !s.is_best) statusBadges = '-';
 
         var pointsClass = s.net_points >= 0 ? 'has-text-success' : 'has-text-danger';
-        var pointsPrefix = s.net_points >= 0 ? '+' : '';
+        var pointsPrefix = s.net_points > 0 ? '+' : (s.net_points === 0 ? '±' : '');
 
         html += '<tr class="' + rowClass + '">';
         html += '<td><strong>' + s.strategy + '</strong></td>';
         html += '<td>' + s.total + '</td>';
         html += '<td>' + s.wins + '</td>';
         html += '<td>' + s.losses + '</td>';
-        html += '<td>' + (s.win_rate || 0) + '%</td>';
+        html += '<td>' + (s.win_rate != null ? s.win_rate + '%' : 'N/A') + '</td>';
         html += '<td class="' + pointsClass + '">' + pointsPrefix + s.net_points + '</td>';
         html += '<td>' + statusBadges + '</td>';
         html += '</tr>';
@@ -502,7 +502,7 @@ function renderDryRunHistory(history) {
 
                 var isActive = s.strategy === pred.active_strategy;
                 var activeMark = isActive ? ' <span class="tag is-warning is-light is-small">ACTIVE</span>' : '';
-                var prefix = s.points_gained >= 0 ? '+' : '';
+                var prefix = s.points_gained > 0 ? '+' : (s.points_gained === 0 ? '±' : '');
 
                 html += '<span class="dry-run-strategy-item ' + cls + '">';
                 html += icon + ' <strong>' + s.strategy + '</strong>';
