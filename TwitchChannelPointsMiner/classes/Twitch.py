@@ -5,6 +5,7 @@
 
 
 import copy
+import json
 import logging
 import os
 import random
@@ -13,7 +14,6 @@ import string
 import time
 import requests
 import validators
-# import json
 
 from pathlib import Path
 from secrets import choice, token_hex
@@ -25,6 +25,7 @@ from typing import Dict, Any
 from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
+from TwitchChannelPointsMiner.classes.entities.Bet import Strategy
 from TwitchChannelPointsMiner.classes.Exceptions import (
     StreamerDoesNotExistException,
     StreamerIsOfflineException,
@@ -696,7 +697,34 @@ class Twitch(object):
             if streamer.settings.community_goals is True:
                 self.contribute_to_community_goals(streamer)
 
+    def _load_historical_outcomes(self, event):
+        """Load historical dry_run_predictions for the HISTORICAL strategy."""
+        if event.bet.settings.strategy != Strategy.HISTORICAL:
+            return
+        streamer = event.streamer
+        if not hasattr(Settings, "analytics_path") or not Settings.analytics_path:
+            return
+        analytics_file = os.path.join(
+            Settings.analytics_path, f"{streamer.username}.json"
+        )
+        if not os.path.isfile(analytics_file):
+            return
+        try:
+            with open(analytics_file, "r") as f:
+                data = json.load(f)
+            event.bet.settings.historical_outcomes = data.get(
+                "dry_run_predictions", []
+            )
+        except Exception:
+            pass
+
     def make_predictions(self, event):
+        # Load historical outcomes for the HISTORICAL strategy
+        try:
+            self._load_historical_outcomes(event)
+        except Exception:
+            pass
+
         decision = event.bet.calculate(event.streamer.channel_points)
         # selector_index = 0 if decision["choice"] == "A" else 1
 

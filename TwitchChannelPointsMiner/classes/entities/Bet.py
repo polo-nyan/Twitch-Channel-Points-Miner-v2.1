@@ -14,6 +14,7 @@ class Strategy(Enum):
     PERCENTAGE = auto()
     SMART_MONEY = auto()
     SMART = auto()
+    HISTORICAL = auto()
     NUMBER_1 = auto()
     NUMBER_2 = auto()
     NUMBER_3 = auto()
@@ -133,6 +134,7 @@ class BetSettings(object):
         "filter_condition",
         "delay",
         "delay_mode",
+        "historical_outcomes",
     ]
 
     def __init__(
@@ -146,6 +148,7 @@ class BetSettings(object):
         filter_condition: FilterCondition = None,
         delay: float = None,
         delay_mode: DelayMode = None,
+        historical_outcomes: list = None,
     ):
         self.strategy = strategy
         self.percentage = percentage
@@ -156,6 +159,7 @@ class BetSettings(object):
         self.filter_condition = filter_condition
         self.delay = delay
         self.delay_mode = delay_mode
+        self.historical_outcomes = historical_outcomes if historical_outcomes is not None else []
 
     def default(self):
         self.strategy = self.strategy if self.strategy is not None else Strategy.SMART
@@ -174,6 +178,8 @@ class BetSettings(object):
         self.delay_mode = (
             self.delay_mode if self.delay_mode is not None else DelayMode.FROM_END
         )
+        if self.historical_outcomes is None:
+            self.historical_outcomes = []
 
     def __repr__(self):
         return f"BetSettings(strategy={self.strategy}, percentage={self.percentage}, percentage_gap={self.percentage_gap}, max_points={self.max_points}, minimum_points={self.minimum_points}, stealth_mode={self.stealth_mode})"
@@ -295,6 +301,69 @@ class Bet(object):
         else:
             return 0
 
+    def __historical_choice(self) -> int:
+        """Choose outcome based on historical win rates, weighted with current odds.
+
+        Uses dry_run_predictions from historical_outcomes (loaded from analytics JSON)
+        to determine which outcome index historically performs best.
+        Falls back to SMART strategy if no historical data is available.
+        """
+        history = getattr(self.settings, "historical_outcomes", [])
+        if not history:
+            # Fall back to SMART strategy logic
+            difference = abs(
+                self.outcomes[0][OutcomeKeys.PERCENTAGE_USERS]
+                - self.outcomes[1][OutcomeKeys.PERCENTAGE_USERS]
+            )
+            return (
+                self.__return_choice(OutcomeKeys.ODDS)
+                if difference < self.settings.percentage_gap
+                else self.__return_choice(OutcomeKeys.TOTAL_USERS)
+            )
+
+        # Count historical wins per outcome index
+        num_outcomes = len(self.outcomes)
+        win_counts = [0] * num_outcomes
+        loss_counts = [0] * num_outcomes
+        total_points_delta = [0] * num_outcomes
+
+        for pred in history:
+            strategies = pred.get("strategies", [])
+            for s in strategies:
+                # Use the active strategy's historical result
+                if s.get("strategy") == pred.get("active_strategy"):
+                    idx = s.get("choice", 0)
+                    if 0 <= idx < num_outcomes:
+                        if s.get("result_type") == "WIN":
+                            win_counts[idx] += 1
+                        elif s.get("result_type") == "LOSE":
+                            loss_counts[idx] += 1
+                        total_points_delta[idx] += s.get("points_gained", 0)
+
+        # Calculate a weighted score per outcome:
+        # historical_win_rate * 0.6 + current_odds_advantage * 0.4
+        scores = []
+        for i in range(num_outcomes):
+            total = win_counts[i] + loss_counts[i]
+            if total > 0:
+                win_rate = win_counts[i] / total
+            else:
+                win_rate = 0.5  # No data: neutral
+
+            odds_pct = self.outcomes[i].get(OutcomeKeys.ODDS_PERCENTAGE, 50)
+            odds_score = odds_pct / 100.0
+
+            # Weighted combination: historical performance + current market sentiment
+            combined = (win_rate * 0.6) + (odds_score * 0.4)
+            scores.append(combined)
+
+        # Return the index with the highest combined score
+        best = 0
+        for i in range(1, num_outcomes):
+            if scores[i] > scores[best]:
+                best = i
+        return best
+
     def skip(self) -> bool:
         if self.settings.filter_condition is not None:
             # key == by , condition == where
@@ -369,6 +438,8 @@ class Bet(object):
                 if difference < self.settings.percentage_gap
                 else self.__return_choice(OutcomeKeys.TOTAL_USERS)
             )
+        elif self.settings.strategy == Strategy.HISTORICAL:
+            self.decision["choice"] = self.__historical_choice()
 
         if self.decision["choice"] is not None:
             #index = char_decision_as_index(self.decision["choice"])
