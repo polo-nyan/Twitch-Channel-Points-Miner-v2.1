@@ -1,3 +1,4 @@
+import ast
 import json
 import logging
 import os
@@ -24,7 +25,6 @@ _DANGEROUS_PATTERNS = [
     (r"\b__import__\b", "__import__() call"),
     (r"\beval\s*\(", "eval() call"),
     (r"\bexec\s*\(", "exec() call"),
-    (r"\bcompile\s*\(", "compile() call"),
     (r"\bglobals\s*\(", "globals() call"),
     (r"\bos\.remove\b", "os.remove() call"),
     (r"\bshutil\.rmtree\b", "shutil.rmtree() call"),
@@ -381,7 +381,7 @@ def config_validate():
         )
 
     try:
-        compile(content, "<config>", "exec")
+        ast.parse(content)
         return Response(
             json.dumps({"valid": True}),
             status=200,
@@ -421,7 +421,7 @@ def config_save():
 
     # Syntax check first
     try:
-        compile(content, "<config>", "exec")
+        ast.parse(content)
     except SyntaxError as e:
         return Response(
             json.dumps({

@@ -169,6 +169,6 @@ class Discord(object):
                 json=payload,
             )
             if resp.status_code == 429:
-                logger.warning("Discord rate limited, message may be delayed")
+                logger.warning("Discord webhook rate limited, notification dropped")
         except requests.RequestException:
             logger.warning("Failed to send Discord embed", exc_info=True)

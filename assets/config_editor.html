@@ -185,11 +185,10 @@
         var lineInfo = document.getElementById('line-info');
 
         function setStatus(cls, text) {
-            statusBar.textContent = '';
             var span = document.createElement('span');
             span.className = cls;
             span.textContent = text;
-            statusBar.appendChild(span);
+            statusBar.replaceChildren(span);
         }
 
         // Load config on page load
