@@ -4,7 +4,6 @@ from random import uniform
 
 from millify import millify
 
-#from TwitchChannelPointsMiner.utils import char_decision_as_index, float_round
 from TwitchChannelPointsMiner.utils import float_round
 
 
@@ -14,6 +13,7 @@ class Strategy(Enum):
     PERCENTAGE = auto()
     SMART_MONEY = auto()
     SMART = auto()
+    HISTORICAL = auto()
     NUMBER_1 = auto()
     NUMBER_2 = auto()
     NUMBER_3 = auto()
@@ -25,6 +25,52 @@ class Strategy(Enum):
 
     def __str__(self):
         return self.name
+
+
+class DryRunResult(object):
+    __slots__ = [
+        "strategy_name",
+        "choice",
+        "amount",
+        "outcome_title",
+        "outcome_color",
+        "result_type",
+        "points_gained",
+    ]
+
+    def __init__(
+        self,
+        strategy_name,
+        choice,
+        amount,
+        outcome_title="",
+        outcome_color="",
+    ):
+        self.strategy_name = strategy_name
+        self.choice = choice
+        self.amount = amount
+        self.outcome_title = outcome_title
+        self.outcome_color = outcome_color
+        self.result_type = None
+        self.points_gained = 0
+
+    def __repr__(self):
+        return (
+            f"DryRunResult(strategy={self.strategy_name}, "
+            f"choice={self.choice}, amount={self.amount}, "
+            f"outcome={self.outcome_title})"
+        )
+
+    def to_dict(self):
+        return {
+            "strategy": self.strategy_name,
+            "choice": self.choice,
+            "amount": self.amount,
+            "outcome_title": self.outcome_title,
+            "outcome_color": self.outcome_color,
+            "result_type": self.result_type,
+            "points_gained": self.points_gained,
+        }
 
 
 class Condition(Enum):
@@ -87,6 +133,7 @@ class BetSettings(object):
         "filter_condition",
         "delay",
         "delay_mode",
+        "historical_outcomes",
     ]
 
     def __init__(
@@ -100,6 +147,7 @@ class BetSettings(object):
         filter_condition: FilterCondition = None,
         delay: float = None,
         delay_mode: DelayMode = None,
+        historical_outcomes: list = None,
     ):
         self.strategy = strategy
         self.percentage = percentage
@@ -110,6 +158,7 @@ class BetSettings(object):
         self.filter_condition = filter_condition
         self.delay = delay
         self.delay_mode = delay_mode
+        self.historical_outcomes = historical_outcomes if historical_outcomes is not None else []
 
     def default(self):
         self.strategy = self.strategy if self.strategy is not None else Strategy.SMART
@@ -128,6 +177,8 @@ class BetSettings(object):
         self.delay_mode = (
             self.delay_mode if self.delay_mode is not None else DelayMode.FROM_END
         )
+        if self.historical_outcomes is None:
+            self.historical_outcomes = []
 
     def __repr__(self):
         return f"BetSettings(strategy={self.strategy}, percentage={self.percentage}, percentage_gap={self.percentage_gap}, max_points={self.max_points}, minimum_points={self.minimum_points}, stealth_mode={self.stealth_mode})"
@@ -179,13 +230,11 @@ class Bet(object):
                     (100 * self.outcomes[index][OutcomeKeys.TOTAL_USERS]) / self.total_users
                 )
                 self.outcomes[index][OutcomeKeys.ODDS] = float_round(
-                    #self.total_points / max(self.outcomes[index][OutcomeKeys.TOTAL_POINTS], 1)
                     0
                     if self.outcomes[index][OutcomeKeys.TOTAL_POINTS] == 0
                     else self.total_points / self.outcomes[index][OutcomeKeys.TOTAL_POINTS]
                 )
                 self.outcomes[index][OutcomeKeys.ODDS_PERCENTAGE] = float_round(
-                    #100 / max(self.outcomes[index][OutcomeKeys.ODDS], 1)
                     0
                     if self.outcomes[index][OutcomeKeys.ODDS] == 0
                     else 100 / self.outcomes[index][OutcomeKeys.ODDS]
@@ -197,7 +246,6 @@ class Bet(object):
         return f"Bet(total_users={millify(self.total_users)}, total_points={millify(self.total_points)}), decision={self.decision})\n\t\tOutcome A({self.get_outcome(0)})\n\t\tOutcome B({self.get_outcome(1)})"
 
     def get_decision(self, parsed=False):
-        #decision = self.outcomes[0 if self.decision["choice"] == "A" else 1]
         decision = self.outcomes[self.decision["choice"]]
         return decision if parsed is False else Bet.__parse_outcome(decision)
 
@@ -233,9 +281,6 @@ class Bet(object):
                 if key not in self.outcomes[index]:
                     self.outcomes[index][key] = 0
 
-    '''def __return_choice(self, key) -> str:
-        return "A" if self.outcomes[0][key] > self.outcomes[1][key] else "B"'''
-
     def __return_choice(self, key) -> int:
         largest=0
         for index in range(0, len(self.outcomes)):
@@ -249,7 +294,70 @@ class Bet(object):
         else:
             return 0
 
-    def skip(self) -> bool:
+    def __historical_choice(self) -> int:
+        """Choose outcome based on historical win rates, weighted with current odds.
+
+        Uses dry_run_predictions from historical_outcomes (loaded from analytics JSON)
+        to determine which outcome index historically performs best.
+        Falls back to SMART strategy if no historical data is available.
+        """
+        history = getattr(self.settings, "historical_outcomes", [])
+        if not history:
+            # Fall back to SMART strategy logic
+            difference = abs(
+                self.outcomes[0][OutcomeKeys.PERCENTAGE_USERS]
+                - self.outcomes[1][OutcomeKeys.PERCENTAGE_USERS]
+            )
+            return (
+                self.__return_choice(OutcomeKeys.ODDS)
+                if difference < self.settings.percentage_gap
+                else self.__return_choice(OutcomeKeys.TOTAL_USERS)
+            )
+
+        # Count historical wins per outcome index
+        num_outcomes = len(self.outcomes)
+        win_counts = [0] * num_outcomes
+        loss_counts = [0] * num_outcomes
+        total_points_delta = [0] * num_outcomes
+
+        for pred in history:
+            strategies = pred.get("strategies", [])
+            for s in strategies:
+                # Use the active strategy's historical result
+                if s.get("strategy") == pred.get("active_strategy"):
+                    idx = s.get("choice", 0)
+                    if 0 <= idx < num_outcomes:
+                        if s.get("result_type") == "WIN":
+                            win_counts[idx] += 1
+                        elif s.get("result_type") == "LOSE":
+                            loss_counts[idx] += 1
+                        total_points_delta[idx] += s.get("points_gained", 0)
+
+        # Calculate a weighted score per outcome:
+        # historical_win_rate * 0.6 + current_odds_advantage * 0.4
+        scores = []
+        for i in range(num_outcomes):
+            total = win_counts[i] + loss_counts[i]
+            if total > 0:
+                win_rate = win_counts[i] / total
+            else:
+                win_rate = 0.5  # No data: neutral
+
+            odds_pct = self.outcomes[i].get(OutcomeKeys.ODDS_PERCENTAGE, 50)
+            odds_score = odds_pct / 100.0
+
+            # Weighted combination: historical performance + current market sentiment
+            combined = (win_rate * 0.6) + (odds_score * 0.4)
+            scores.append(combined)
+
+        # Return the index with the highest combined score
+        best = 0
+        for i in range(1, num_outcomes):
+            if scores[i] > scores[best]:
+                best = i
+        return best
+
+    def skip(self) -> tuple:
         if self.settings.filter_condition is not None:
             # key == by , condition == where
             key = self.settings.filter_condition.by
@@ -266,7 +374,6 @@ class Bet(object):
                     self.outcomes[0][fixed_key] + self.outcomes[1][fixed_key]
                 )
             else:
-                #outcome_index = char_decision_as_index(self.decision["choice"])
                 outcome_index = self.decision["choice"]
                 compared_value = self.outcomes[outcome_index][fixed_key]
 
@@ -323,9 +430,10 @@ class Bet(object):
                 if difference < self.settings.percentage_gap
                 else self.__return_choice(OutcomeKeys.TOTAL_USERS)
             )
+        elif self.settings.strategy == Strategy.HISTORICAL:
+            self.decision["choice"] = self.__historical_choice()
 
         if self.decision["choice"] is not None:
-            #index = char_decision_as_index(self.decision["choice"])
             index = self.decision["choice"]
             self.decision["id"] = self.outcomes[index]["id"]
             self.decision["amount"] = min(
@@ -343,3 +451,49 @@ class Bet(object):
                 )
             self.decision["amount"] = int(self.decision["amount"])
         return self.decision
+
+    def dry_run_all_strategies(self, balance):
+        results = []
+        # Skip NUMBER_X strategies that reference non-existent outcomes
+        num_outcomes = len(self.outcomes)
+        number_strategies = {
+            Strategy.NUMBER_1: 0,
+            Strategy.NUMBER_2: 1,
+            Strategy.NUMBER_3: 2,
+            Strategy.NUMBER_4: 3,
+            Strategy.NUMBER_5: 4,
+            Strategy.NUMBER_6: 5,
+            Strategy.NUMBER_7: 6,
+            Strategy.NUMBER_8: 7,
+        }
+
+        # Save original decision so we can restore it
+        original_decision = dict(self.decision) if self.decision else {}
+        original_strategy = self.settings.strategy
+
+        for strategy in Strategy:
+            # Skip NUMBER_X strategies that exceed available outcomes
+            if strategy in number_strategies:
+                if number_strategies[strategy] >= num_outcomes:
+                    continue
+
+            self.settings.strategy = strategy
+            self.decision = {"choice": None, "amount": 0, "id": None}
+            self.calculate(balance)
+
+            if self.decision["choice"] is not None:
+                idx = self.decision["choice"]
+                result = DryRunResult(
+                    strategy_name=str(strategy),
+                    choice=idx,
+                    amount=self.decision["amount"],
+                    outcome_title=self.outcomes[idx].get("title", ""),
+                    outcome_color=self.outcomes[idx].get("color", ""),
+                )
+                results.append(result)
+
+        # Restore original state
+        self.settings.strategy = original_strategy
+        self.decision = original_decision
+
+        return results

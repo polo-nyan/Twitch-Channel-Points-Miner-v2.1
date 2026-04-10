@@ -53,6 +53,9 @@ twitch_miner = TwitchChannelPointsMiner(
             webhook_api="https://discord.com/api/webhooks/0123456789/0a1B2c3D4e5F6g7H8i9J",  # Discord Webhook URL
             events=[Events.STREAMER_ONLINE, Events.STREAMER_OFFLINE,
                     Events.BET_LOSE, Events.CHAT_MENTION],                                  # Only these events will be sent to the chat
+            muted_channels=[],                                                              # List of streamer usernames to fully mute Discord notifications for
+            muted_events_per_channel={},                                                    # Dict of {streamer: [Events]} to mute specific events per channel
+            global_muted_events=[],                                                         # List of Events to mute globally across all channels
         ),
         webhook=Webhook(
             endpoint="https://example.com/webhook",                                                                    # Webhook URL

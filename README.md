@@ -1,29 +1,13 @@
-![Twitch Channel Points Miner - v2](https://raw.githubusercontent.com/rdavydov/Twitch-Channel-Points-Miner-v2/master/assets/banner.png)
+![Twitch Channel Points Miner - v2.1](https://raw.githubusercontent.com/rdavydov/Twitch-Channel-Points-Miner-v2/master/assets/banner.png)
+
+<h1 align="center">Twitch Channel Points Miner v2.1</h1>
 <p align="center">
-<a href="https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2/releases"><img alt="Latest Version" src="https://img.shields.io/github/v/release/rdavydov/Twitch-Channel-Points-Miner-v2?style=flat&color=white&logo=github&logoColor=white"></a>
-<a href="https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2/stargazers"><img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/rdavydov/Twitch-Channel-Points-Miner-v2?style=flat&color=limegreen&logo=github&logoColor=white"></a>
-<a href='https://github.com/MShawon/github-clone-count-badge'><img alt='GitHub Traffic' src='https://img.shields.io/badge/dynamic/json?style=flat&color=blue&label=views&query=count&url=https://gist.githubusercontent.com/rdavydov/ad9a3c6a8d9c322f9a6b62781ea94a93/raw/traffic.json&logo=github&logoColor=white'></a>
-<a href='https://github.com/MShawon/github-clone-count-badge'><img alt='GitHub Clones' src='https://img.shields.io/badge/dynamic/json?style=flat&color=purple&label=clones&query=count&url=https://gist.githubusercontent.com/rdavydov/fed04b31a250ad522d9ea6547ce87f95/raw/clone.json&logo=github&logoColor=white'></a>
-<a href="https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2/blob/master/LICENSE"><img alt="License" src="https://img.shields.io/github/license/rdavydov/Twitch-Channel-Points-Miner-v2?style=flat&color=black&logo=unlicense&logoColor=white"></a>
-<a href="https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2"><img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/rdavydov/Twitch-Channel-Points-Miner-v2?style=flat&color=lightyellow&logo=github&logoColor=white"></a>
+<a href="https://github.com/polo-nyan/Twitch-Channel-Points-Miner-v2.1"><img alt="This Fork" src="https://img.shields.io/badge/fork-polo--nyan%2Fv2.1-f9826c?style=flat&logo=github&logoColor=white"></a>
+<a href="https://github.com/polo-nyan/Twitch-Channel-Points-Miner-v2.1/blob/master/LICENSE"><img alt="License" src="https://img.shields.io/github/license/polo-nyan/Twitch-Channel-Points-Miner-v2.1?style=flat&color=black&logo=unlicense&logoColor=white"></a>
+<a href="https://github.com/polo-nyan/Twitch-Channel-Points-Miner-v2.1"><img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/polo-nyan/Twitch-Channel-Points-Miner-v2.1?style=flat&color=lightyellow&logo=github&logoColor=white"></a>
 </p>
 
-<p align="center">
-<a href="https://hub.docker.com/r/rdavidoff/twitch-channel-points-miner-v2"><img alt="Docker Version" src="https://img.shields.io/docker/v/rdavidoff/twitch-channel-points-miner-v2?style=flat&color=white&logo=docker&logoColor=white&label=release"></a>
-<a href="https://hub.docker.com/r/rdavidoff/twitch-channel-points-miner-v2"><img alt="Docker Stars" src="https://img.shields.io/docker/stars/rdavidoff/twitch-channel-points-miner-v2?style=flat&color=limegreen&logo=docker&logoColor=white&label=stars"></a>
-<a href="https://hub.docker.com/r/rdavidoff/twitch-channel-points-miner-v2"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/rdavidoff/twitch-channel-points-miner-v2?style=flat&color=blue&logo=docker&logoColor=white&label=pulls"></a>
-<a href="https://hub.docker.com/r/rdavidoff/twitch-channel-points-miner-v2"><img alt="Docker Images Size AMD64" src="https://img.shields.io/docker/image-size/rdavidoff/twitch-channel-points-miner-v2/latest?arch=amd64&label=AMD64 image size&style=flat&color=purple&logo=amd&logoColor=white"></a>
-<a href="https://hub.docker.com/r/rdavidoff/twitch-channel-points-miner-v2"><img alt="Docker Images Size ARM64" src="https://img.shields.io/docker/image-size/rdavidoff/twitch-channel-points-miner-v2/latest?arch=arm64&label=ARM64 image size&style=flat&color=black&logo=arm&logoColor=white"></a>
-<a href="https://hub.docker.com/r/rdavidoff/twitch-channel-points-miner-v2"><img alt="Docker Images Size ARMv7" src="https://img.shields.io/docker/image-size/rdavidoff/twitch-channel-points-miner-v2/latest?arch=arm&label=ARMv7 image size&style=flat&color=lightyellow&logo=arm&logoColor=white"></a>
-</p>
-
-
-<h1 align="center">https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2</h1>
-
-**Credits**
-- Main idea: https://github.com/gottagofaster236/Twitch-Channel-Points-Miner
-- ~~Bet system (Selenium): https://github.com/ClementRoyer/TwitchAutoCollect-AutoBet~~
-- Based on: https://github.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2
+> ⚠️ **AI-Assisted Development Notice**: This fork contains commits generated with the assistance of AI coding agents (GitHub Copilot). While all changes have been reviewed, some code may not have been manually tested in all edge cases. Please review changes carefully before deploying to production. See [AI_NOTICE.md](AI_NOTICE.md) for details.
 
 > A simple script that will watch a stream for you and earn the channel points.
 
@@ -31,49 +15,71 @@
 
 Read more about the channel points [here](https://help.twitch.tv/s/article/channel-points-guide).
 
+<details>
+<summary><strong>📜 Original Authors & Credits</strong></summary>
+
+**Upstream Repositories:**
+- Original concept: [gottagofaster236/Twitch-Channel-Points-Miner](https://github.com/gottagofaster236/Twitch-Channel-Points-Miner)
+- ~~Bet system (Selenium): [ClementRoyer/TwitchAutoCollect-AutoBet](https://github.com/ClementRoyer/TwitchAutoCollect-AutoBet)~~
+- v2 rewrite: [Tkd-Alex/Twitch-Channel-Points-Miner-v2](https://github.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2)
+- v2 fork by rdavydov: [rdavydov/Twitch-Channel-Points-Miner-v2](https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2)
+
+**Donations (original maintainers):**
+| | |
+|---|---|
+|<a href="https://bitcoin.org" target="_blank"><img src="https://dynamic-assets.coinbase.com/e785e0181f1a23a30d9476038d9be91e9f6c63959b538eabbc51a1abc8898940383291eede695c3b8dfaa1829a9b57f5a2d0a16b0523580346c6b8fab67af14b/asset_icons/b57ac673f06a4b0338a596817eb0a50ce16e2059f327dc117744449a47915cb2.png" alt="Donate BTC" height="16" width="16"></a>|`bc1qq49mvgda2zw4f9kta0a85xztwuxewqwac5eckd` _(BTC - rdavydov)_|
+|<a href="https://dogechain.info" target="_blank"><img src="https://dynamic-assets.coinbase.com/3803f30367bb3972e192cd3fdd2230cd37e6d468eab12575a859229b20f12ff9c994d2c86ccd7bf9bc258e9bd5e46c5254283182f70caf4bd02cc4f8e3890d82/asset_icons/1597d628dd19b7885433a2ac2d7de6ad196c519aeab4bfe679706aacbf1df78a.png" alt="Donate DOGE" height="16" width="16"></a>|`DAKzncwKkpfPCm1xVU7u2pConpXwX7HS3D` _(DOGE - rdavydov)_|
+|<a href="https://www.donationalerts.com/r/rdavydov" target="_blank"><img src="https://www.donationalerts.com/static/donations/dist/favicon.ico" alt="Donate via DonationAlerts" height="16" width="16"></a>|https://www.donationalerts.com/r/rdavydov|
+|<a href="https://boosty.to/rdavydov/donate" target="_blank"><img src="https://static.boosty.to/static/favicon.png?v=11" alt="Donate via Boosty" height="16" width="16"></a>|https://boosty.to/rdavydov/donate|
+
+</details>
+
 # README Contents
 1. 🤝 [Community](#community)
-2. 🚀 [Main differences from the original repository](#main-differences-from-the-original-repository)
-3. 🧾 [Logs feature](#logs-feature)
+2. 🚀 [What's New in v2.1](#whats-new-in-v21)
+3. 🔧 [Original v2 Features](#original-v2-features)
+4. 🧾 [Logs feature](#logs-feature)
     - [Full logs](#full-logs)
     - [Less logs](#less-logs)
     - [Final report](#final-report)
-4. 🧐 [How to use](#how-to-use)
+5. 🧐 [How to use](#how-to-use)
     - [Cloning](#by-cloning-the-repository)
     - [Docker](#docker)
     	- [Docker Hub](#docker-hub)
 		- [Portainer](#portainer)
     - [Replit](#replit)
     - [Limits](#limits)
-5. 🔧 [Settings](#settings)
+6. 🔧 [Settings](#settings)
     - [LoggerSettings](#loggersettings)
     - [StreamerSettings](#streamersettings)
     - [BetSettings](#betsettings)
         - [Bet strategy](#bet-strategy)
     - [FilterCondition](#filtercondition)
         - [Example](#example)
-6. 📈 [Analytics](#analytics)
-7. 🍪 [Migrating from an old repository (the original one)](#migrating-from-an-old-repository-the-original-one)
-8. 🪟 [Windows](#windows)
-9. 📱 [Termux](#termux)
-10. ⚠️ [Disclaimer](#disclaimer)
+7. 📈 [Analytics](#analytics)
+8. 🍪 [Migrating from an old repository (the original one)](#migrating-from-an-old-repository-the-original-one)
+9. 🪟 [Windows](#windows)
+10. 📱 [Termux](#termux)
+11. ⚠️ [Disclaimer](#disclaimer)
 
 
 ## Community
 If you want to help with this project, please leave a star 🌟 and share it with your friends! 😎
 
-If you want to offer me a coffee, I would be grateful! ❤️
+If you have any issues or you want to contribute, you are welcome! Please open an issue or PR on this repository.
 
-|                                                                                                                                                                                                                                                                                                           |                                               |
-|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|
-|<a href="https://bitcoin.org" target="_blank"><img src="https://dynamic-assets.coinbase.com/e785e0181f1a23a30d9476038d9be91e9f6c63959b538eabbc51a1abc8898940383291eede695c3b8dfaa1829a9b57f5a2d0a16b0523580346c6b8fab67af14b/asset_icons/b57ac673f06a4b0338a596817eb0a50ce16e2059f327dc117744449a47915cb2.png" alt="Donate BTC" height="16" width="16"></a>|`bc1qq49mvgda2zw4f9kta0a85xztwuxewqwac5eckd` _(<a href="https://bitcoin.org" target="_blank">BTC</a>)_|
-|<a href="https://dogechain.info" target="_blank"><img src="https://dynamic-assets.coinbase.com/3803f30367bb3972e192cd3fdd2230cd37e6d468eab12575a859229b20f12ff9c994d2c86ccd7bf9bc258e9bd5e46c5254283182f70caf4bd02cc4f8e3890d82/asset_icons/1597d628dd19b7885433a2ac2d7de6ad196c519aeab4bfe679706aacbf1df78a.png" alt="Donate DOGE" height="16" width="16"></a>|`DAKzncwKkpfPCm1xVU7u2pConpXwX7HS3D` _(<a href="https://dogechain.info" target="_blank">DOGE</a>)_|
-|<a href="https://www.donationalerts.com/r/rdavydov" target="_blank"><img src="https://www.donationalerts.com/static/donations/dist/favicon.ico" alt="Donate via DonationAlerts" height="16" width="16"></a>|https://www.donationalerts.com/r/rdavydov|
-|<a href="https://boosty.to/rdavydov/donate" target="_blank"><img src="https://static.boosty.to/static/favicon.png?v=11" alt="Donate via Boosty" height="16" width="16"></a>|https://boosty.to/rdavydov/donate|
+## What's New in v2.1
 
-If you have any issues or you want to contribute, you are welcome! But please read the [CONTRIBUTING.md](https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2/blob/master/CONTRIBUTING.md) file.
+This fork adds significant new features on top of the upstream v2:
 
-## Main differences from the original repository:
+- 🔮 **Dry-Run Strategy Comparison** — Shadow-evaluates all available strategies on every prediction event, scores them after resolution, and shows results in the web UI ✔️
+- 📊 **HISTORICAL Strategy** — New prediction strategy that weighs historical outcome win rates (60%) with current odds (40%) ✔️
+- 💬 **Discord Rich Embeds** — Upgraded from plain text to rich embeds with event-specific colors, icons, timestamps, and streamer info ✔️
+- 🔇 **Discord Mute System** — Mute notifications per-channel, per-event, or globally (e.g., silence all `GAIN_FOR_WATCH` or mute a specific streamer) ✔️
+- ⚙️ **Web Config Editor** — Edit your `run.py` config directly in the browser with syntax validation, save with backup, and revert ✔️
+- 🤖 **AI Notice** — Transparency about AI-assisted development ✔️
+
+## Original v2 Features
 
 - Improved logging: emojis, colors, files and much more ✔️
 - Final report with all the data ✔️
@@ -602,6 +608,7 @@ Allowed values for `chat` are:
 - **PERCENTAGE**: Select the option with the highest percentage based on odds (It's the same that show Twitch) - Should be the same as select LOWEST_ODDS
 - **SMART_MONEY**: Select the option with the highest points placed. [#331](https://github.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2/issues/331)
 - **SMART**: If the majority in percent chose an option, then follow the other users, otherwise select the option with the highest odds
+- **HISTORICAL**: Weighs historical win rates from past predictions (60%) with current market odds (40%). Falls back to SMART if no history is available. Requires `enable_analytics=True`. See [What's New in v2.1](#whats-new-in-v21)
 - **NUMBER_1**: Always select the 1st option, BLUE side if there are only two options
 - **NUMBER_2**: Always select the 2nd option, PINK side if there are only two options
 - **NUMBER_3**: Always select the 3rd option

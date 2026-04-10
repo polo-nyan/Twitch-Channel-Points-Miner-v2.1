@@ -68,3 +68,49 @@ a {
     padding: 0;
     border-radius: 5px;
 }
+
+/* Dry Run Strategy Comparison */
+.dry-run-table {
+    font-size: 0.9rem;
+}
+
+.dry-run-table th {
+    font-weight: 600;
+}
+
+.dry-run-best {
+    background-color: rgba(54, 181, 53, 0.1) !important;
+}
+
+.dry-run-active {
+    background-color: rgba(255, 224, 69, 0.1) !important;
+}
+
+.dry-run-prediction-card {
+    border: 1px solid #dbdbdb;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.dry-run-prediction-header {
+    margin-bottom: 0.3rem;
+}
+
+.dry-run-prediction-strategies {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.dry-run-strategy-item {
+    font-size: 0.8rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.dry-run-history-list {
+    max-height: 400px;
+    overflow-y: auto;
+}

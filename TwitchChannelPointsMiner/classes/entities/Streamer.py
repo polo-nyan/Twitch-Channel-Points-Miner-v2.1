@@ -236,6 +236,16 @@ class Streamer(object):
     def persistent_series(self, event_type="Watch"):
         self.__save_json("series", event_type=event_type)
 
+    def persistent_dry_run(self, event_title, active_strategy, dry_run_results):
+        now = datetime.now().replace(microsecond=0)
+        data = {
+            "x": round(datetime.timestamp(now) * 1000),
+            "event_title": event_title,
+            "active_strategy": active_strategy,
+            "strategies": [dr.to_dict() for dr in dry_run_results],
+        }
+        self.__save_json("dry_run_predictions", data)
+
     def __save_json(self, key, data={}, event_type="Watch"):
         # https://stackoverflow.com/questions/4676195/why-do-i-need-to-multiply-unix-timestamps-by-1000-in-javascript
         now = datetime.now().replace(microsecond=0)

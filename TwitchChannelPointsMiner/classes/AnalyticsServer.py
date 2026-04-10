@@ -1,6 +1,9 @@
+import ast
 import json
 import logging
 import os
+import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 from threading import Thread
@@ -13,6 +16,29 @@ from TwitchChannelPointsMiner.utils import download_file
 
 cli.show_server_banner = lambda *_: None
 logger = logging.getLogger(__name__)
+
+
+# Patterns that should not appear in a config file
+_DANGEROUS_PATTERNS = [
+    (r"\bos\.system\b", "os.system() call"),
+    (r"\bsubprocess\b", "subprocess module usage"),
+    (r"\b__import__\b", "__import__() call"),
+    (r"\beval\s*\(", "eval() call"),
+    (r"\bexec\s*\(", "exec() call"),
+    (r"\bglobals\s*\(", "globals() call"),
+    (r"\bos\.remove\b", "os.remove() call"),
+    (r"\bshutil\.rmtree\b", "shutil.rmtree() call"),
+]
+
+
+def _check_dangerous_patterns(content: str):
+    """Return a warning string if dangerous code is found, else None."""
+    for pattern, desc in _DANGEROUS_PATTERNS:
+        match = re.search(pattern, content)
+        if match:
+            line_num = content[: match.start()].count("\n") + 1
+            return f"Potentially dangerous code on line {line_num}: {desc}"
+    return None
 
 
 def streamers_available():
@@ -189,6 +215,105 @@ def streamers():
     )
 
 
+def dry_run(streamer):
+    path = Settings.analytics_path
+    streamer_file = streamer if streamer.endswith(".json") else f"{streamer}.json"
+
+    if not os.path.exists(os.path.join(path, streamer_file)):
+        return Response(
+            json.dumps({"error": f"File '{streamer_file}' not found."}),
+            status=404,
+            mimetype="application/json",
+        )
+
+    try:
+        with open(os.path.join(path, streamer_file), "r") as file:
+            data = json.load(file)
+    except json.JSONDecodeError:
+        logger.error(f"Error decoding JSON in file '{streamer_file}'")
+        return Response(
+            json.dumps({"error": "Error decoding analytics data."}),
+            status=500,
+            mimetype="application/json",
+        )
+
+    results = data.get("dry_run_predictions", [])
+    return Response(
+        json.dumps(results), status=200, mimetype="application/json"
+    )
+
+
+def dry_run_summary(streamer):
+    path = Settings.analytics_path
+    streamer_file = streamer if streamer.endswith(".json") else f"{streamer}.json"
+
+    if not os.path.exists(os.path.join(path, streamer_file)):
+        return Response(
+            json.dumps({"error": f"File '{streamer_file}' not found."}),
+            status=404,
+            mimetype="application/json",
+        )
+
+    try:
+        with open(os.path.join(path, streamer_file), "r") as file:
+            data = json.load(file)
+    except json.JSONDecodeError:
+        logger.error(f"Error decoding JSON in file '{streamer_file}'")
+        return Response(
+            json.dumps({"error": "Error decoding analytics data."}),
+            status=500,
+            mimetype="application/json",
+        )
+
+    predictions = data.get("dry_run_predictions", [])
+    summary = {}
+
+    for pred in predictions:
+        active = pred.get("active_strategy", "")
+        for s in pred.get("strategies", []):
+            name = s.get("strategy", "")
+            if name not in summary:
+                summary[name] = {
+                    "strategy": name,
+                    "total": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "refunds": 0,
+                    "net_points": 0,
+                    "is_active": name == active,
+                }
+            summary[name]["total"] += 1
+            rt = s.get("result_type")
+            if rt == "WIN":
+                summary[name]["wins"] += 1
+            elif rt == "LOSE":
+                summary[name]["losses"] += 1
+            elif rt == "REFUND":
+                summary[name]["refunds"] += 1
+            summary[name]["net_points"] += s.get("points_gained", 0)
+            # Update is_active to the latest
+            summary[name]["is_active"] = name == active
+
+    result = sorted(summary.values(), key=lambda x: x["net_points"], reverse=True)
+
+    # Mark the best performer
+    if result:
+        result[0]["is_best"] = True
+        for r in result[1:]:
+            r["is_best"] = False
+        for r in result:
+            resolved = r["total"] - r["refunds"]
+            r["win_rate"] = (
+                round(r["wins"] / resolved * 100, 1)
+                if resolved > 0
+                else 0.0
+            )
+
+    return Response(
+        json.dumps(result), status=200, mimetype="application/json"
+    )
+
+
 def download_assets(assets_folder, required_files):
     Path(assets_folder).mkdir(parents=True, exist_ok=True)
     logger.info(f"Downloading assets to {assets_folder}")
@@ -203,10 +328,173 @@ def download_assets(assets_folder, required_files):
                 logger.info(f"Downloaded {f}")
 
 
+def config_editor_page():
+    return render_template("config_editor.html")
+
+
+def config_read():
+    """Read the current run.py config file."""
+    config_path = os.path.join(Path().absolute(), "run.py")
+    if not os.path.isfile(config_path):
+        # Try example.py as fallback
+        config_path = os.path.join(Path().absolute(), "example.py")
+    if not os.path.isfile(config_path):
+        return Response(
+            json.dumps({"error": "No config file found (run.py or example.py)."}),
+            status=404,
+            mimetype="application/json",
+        )
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return Response(
+            json.dumps({"content": content, "path": config_path}),
+            status=200,
+            mimetype="application/json",
+        )
+    except Exception:
+        return Response(
+            json.dumps({"error": "Failed to read config file."}),
+            status=500,
+            mimetype="application/json",
+        )
+
+
+def config_validate():
+    """Validate Python syntax of submitted config content."""
+    data = request.get_json(silent=True)
+    if not data or "content" not in data:
+        return Response(
+            json.dumps({"valid": False, "error": "No content provided."}),
+            status=400,
+            mimetype="application/json",
+        )
+    content = data["content"]
+
+    # Check for dangerous patterns first
+    danger = _check_dangerous_patterns(content)
+    if danger:
+        return Response(
+            json.dumps({"valid": False, "error": danger}),
+            status=200,
+            mimetype="application/json",
+        )
+
+    try:
+        ast.parse(content)
+        return Response(
+            json.dumps({"valid": True}),
+            status=200,
+            mimetype="application/json",
+        )
+    except SyntaxError as e:
+        return Response(
+            json.dumps({
+                "valid": False,
+                "error": f"Line {e.lineno}: {e.msg}",
+                "lineno": e.lineno,
+            }),
+            status=200,
+            mimetype="application/json",
+        )
+
+
+def config_save():
+    """Save config after validation, creating a backup first."""
+    data = request.get_json(silent=True)
+    if not data or "content" not in data:
+        return Response(
+            json.dumps({"success": False, "error": "No content provided."}),
+            status=400,
+            mimetype="application/json",
+        )
+    content = data["content"]
+
+    # Safety check for dangerous patterns
+    danger = _check_dangerous_patterns(content)
+    if danger:
+        return Response(
+            json.dumps({"success": False, "error": danger}),
+            status=400,
+            mimetype="application/json",
+        )
+
+    # Syntax check first
+    try:
+        ast.parse(content)
+    except SyntaxError as e:
+        return Response(
+            json.dumps({
+                "success": False,
+                "error": f"Syntax error on line {e.lineno}: {e.msg}",
+            }),
+            status=400,
+            mimetype="application/json",
+        )
+
+    config_path = os.path.join(Path().absolute(), "run.py")
+    if not os.path.isfile(config_path):
+        config_path = os.path.join(Path().absolute(), "example.py")
+
+    # Create backup
+    backup_path = config_path + ".bak"
+    try:
+        if os.path.isfile(config_path):
+            shutil.copy2(config_path, backup_path)
+    except Exception:
+        logger.warning("Failed to create config backup")
+
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        logger.info("Config file saved via web editor")
+        return Response(
+            json.dumps({"success": True, "path": config_path}),
+            status=200,
+            mimetype="application/json",
+        )
+    except Exception:
+        return Response(
+            json.dumps({"success": False, "error": "Failed to write config file."}),
+            status=500,
+            mimetype="application/json",
+        )
+
+
+_server_start_time = None
+
+
+def health():
+    """Return basic health status of the miner."""
+    import time
+
+    uptime = None
+    if _server_start_time is not None:
+        uptime = int(time.time() - _server_start_time)
+
+    path = Settings.analytics_path
+    streamer_count = 0
+    try:
+        streamer_count = len(streamers_available())
+    except Exception:
+        pass
+
+    return Response(
+        json.dumps({
+            "status": "ok",
+            "uptime_seconds": uptime,
+            "streamers_tracked": streamer_count,
+        }),
+        status=200,
+        mimetype="application/json",
+    )
+
+
 def check_assets():
     required_files = [
         "banner.png",
         "charts.html",
+        "config_editor.html",
         "script.js",
         "style.css",
         "dark-theme.css",
@@ -285,8 +573,54 @@ class AnalyticsServer(Thread):
                               json_all, methods=["GET"])
         self.app.add_url_rule(
             "/log", "log", generate_log, methods=["GET"])
+        self.app.add_url_rule(
+            "/dry_run/<string:streamer>",
+            "dry_run",
+            dry_run,
+            methods=["GET"],
+        )
+        self.app.add_url_rule(
+            "/dry_run_summary/<string:streamer>",
+            "dry_run_summary",
+            dry_run_summary,
+            methods=["GET"],
+        )
+        self.app.add_url_rule(
+            "/config",
+            "config_editor",
+            config_editor_page,
+            methods=["GET"],
+        )
+        self.app.add_url_rule(
+            "/api/config",
+            "config_read",
+            config_read,
+            methods=["GET"],
+        )
+        self.app.add_url_rule(
+            "/api/config/validate",
+            "config_validate",
+            config_validate,
+            methods=["POST"],
+        )
+        self.app.add_url_rule(
+            "/api/config/save",
+            "config_save",
+            config_save,
+            methods=["POST"],
+        )
+        self.app.add_url_rule(
+            "/health",
+            "health",
+            health,
+            methods=["GET"],
+        )
 
     def run(self):
+        global _server_start_time
+        import time
+
+        _server_start_time = time.time()
         logger.info(
             f"Analytics running on http://{self.host}:{self.port}/",
             extra={"emoji": ":globe_with_meridians:"},

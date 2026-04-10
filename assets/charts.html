@@ -159,9 +159,17 @@
                     <input type="checkbox" checked="true" id="dark-mode">
                 </label>
                 <label class="checkbox checkbox-label">
+                    Dry Run
+                    <input type="checkbox" id="dry-run">
+                </label>
+                <label class="checkbox checkbox-label">
                     Header
                     <input type="checkbox" checked="true" id="toggle-header">
                 </label>
+                <a href="/config" style="margin-left: 0.5rem; color: #f9826c; text-decoration: none; font-weight: bold;"
+                    title="Edit configuration">
+                    ⚙️ Config
+                </a>
             </div>
         </div>
         <div class="columns">
@@ -178,6 +186,19 @@
             <div class="column is-12">
                 <div class="box" id="log-box" style="padding: 0.30rem; display: none;">
                     <pre id="log-content">In your run.py file set save=True in logger_settings to save logs to a file.&#10;&#13;</pre>
+                </div>
+            </div>
+        </div>
+        <div class="columns">
+            <div class="column is-12">
+                <div class="box" id="dry-run-box" style="padding: 0.75rem; display: none;">
+                    <h3 class="title is-5" style="margin-bottom: 0.5rem;">
+                        <i class="fas fa-flask"></i> Strategy Comparison (Dry Run)
+                    </h3>
+                    <div id="dry-run-summary">
+                        <p class="has-text-grey">Select a streamer to view strategy comparison data.</p>
+                    </div>
+                    <div id="dry-run-history" style="margin-top: 1rem;"></div>
                 </div>
             </div>
         </div>

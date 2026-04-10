@@ -115,7 +115,7 @@ $(document).ready(function () {
         if (isLogCheckboxChecked) {
             $.get(`/log?lastIndex=${lastReceivedLogIndex}`, function (data) {
                 // Process and display the new log entries received
-                $("#log-content").append(data);
+                $("#log-content").append(document.createTextNode(data));
                 // Scroll to the bottom of the log content
                 $("#log-content").scrollTop($("#log-content")[0].scrollHeight);
 
@@ -220,6 +220,24 @@ $(document).ready(function () {
             // $("#log-content").text('');
         }
     });
+
+    // Dry-run checkbox
+    var dryRunState = localStorage.getItem('dryRunState');
+    $('#dry-run').prop('checked', dryRunState === 'true');
+    if (dryRunState === 'true') {
+        $('#dry-run-box').show();
+    }
+
+    $('#dry-run').change(function () {
+        var isChecked = $(this).prop('checked');
+        localStorage.setItem('dryRunState', isChecked);
+        if (isChecked) {
+            $('#dry-run-box').show();
+            if (currentStreamer) loadDryRunData(currentStreamer);
+        } else {
+            $('#dry-run-box').hide();
+        }
+    });
 });
 
 function formatDate(date) {
@@ -247,6 +265,11 @@ function changeStreamer(streamer, index) {
     localStorage.setItem("selectedStreamer", currentStreamer);
 
     getStreamerData(streamer);
+
+    // Refresh dry-run data if panel is visible
+    if ($('#dry-run').prop('checked')) {
+        loadDryRunData(streamer);
+    }
 }
 
 function getStreamerData(streamer) {
@@ -387,3 +410,117 @@ $('#endDate').change(() => {
     endDate = new Date($('#endDate').val());
     getStreamerData(currentStreamer);
 });
+
+// === DRY RUN STRATEGY COMPARISON === //
+
+function formatPointsPrefix(points) {
+    if (points > 0) return '+';
+    return '';
+}
+
+function loadDryRunData(streamer) {
+    var name = streamer.replace(".json", "");
+    $.getJSON(`./dry_run_summary/${name}`, function (summary) {
+        renderDryRunSummary(summary);
+    }).fail(function () {
+        $('#dry-run-summary').html('<p class="has-text-grey">No dry-run data available yet.</p>');
+    });
+    $.getJSON(`./dry_run/${name}`, function (history) {
+        renderDryRunHistory(history);
+    }).fail(function () {
+        $('#dry-run-history').html('');
+    });
+}
+
+function renderDryRunSummary(summary) {
+    if (!summary || summary.length === 0) {
+        $('#dry-run-summary').html('<p class="has-text-grey">No dry-run data available yet. Predictions will appear here after events resolve.</p>');
+        return;
+    }
+
+    var html = '<table class="table is-fullwidth is-hoverable dry-run-table">';
+    html += '<thead><tr>';
+    html += '<th>Strategy</th><th>Total</th><th>Wins</th><th>Losses</th>';
+    html += '<th>Win Rate</th><th>Net Points</th><th>Status</th>';
+    html += '</tr></thead><tbody>';
+
+    summary.forEach(function (s) {
+        var rowClass = '';
+        if (s.is_best) rowClass = 'dry-run-best';
+        else if (s.is_active) rowClass = 'dry-run-active';
+
+        var statusBadges = '';
+        if (s.is_active) statusBadges += '<span class="tag is-warning is-light">ACTIVE</span> ';
+        if (s.is_best) statusBadges += '<span class="tag is-success is-light">BEST</span>';
+        if (!s.is_active && !s.is_best) statusBadges = '-';
+
+        var pointsClass = s.net_points >= 0 ? 'has-text-success' : 'has-text-danger';
+        var pointsPrefix = formatPointsPrefix(s.net_points);
+
+        html += '<tr class="' + rowClass + '">';
+        html += '<td><strong>' + s.strategy + '</strong></td>';
+        html += '<td>' + s.total + '</td>';
+        html += '<td>' + s.wins + '</td>';
+        html += '<td>' + s.losses + '</td>';
+        html += '<td>' + (s.win_rate != null ? s.win_rate + '%' : 'N/A') + '</td>';
+        html += '<td class="' + pointsClass + '">' + pointsPrefix + s.net_points + '</td>';
+        html += '<td>' + statusBadges + '</td>';
+        html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    $('#dry-run-summary').html(html);
+}
+
+function renderDryRunHistory(history) {
+    if (!history || history.length === 0) {
+        $('#dry-run-history').html('');
+        return;
+    }
+
+    // Show last 10 predictions, most recent first
+    var recent = history.slice(-10).reverse();
+
+    var html = '<h4 class="title is-6" style="margin-bottom: 0.5rem;">Recent Predictions</h4>';
+    html += '<div class="dry-run-history-list">';
+
+    recent.forEach(function (pred) {
+        var date = new Date(pred.x);
+        var dateStr = date.toLocaleString();
+
+        html += '<div class="dry-run-prediction-card">';
+        html += '<div class="dry-run-prediction-header">';
+        html += '<strong>' + (pred.event_title || 'Prediction') + '</strong>';
+        html += '<span class="has-text-grey is-size-7"> ' + dateStr + '</span>';
+        html += '<span class="tag is-info is-light is-small" style="margin-left:0.5rem;">Active: ' + (pred.active_strategy || '-') + '</span>';
+        html += '</div>';
+        html += '<div class="dry-run-prediction-strategies">';
+
+        if (pred.strategies) {
+            pred.strategies.forEach(function (s) {
+                var icon = '';
+                var cls = '';
+                if (s.result_type === 'WIN') { icon = '✅'; cls = 'has-text-success'; }
+                else if (s.result_type === 'LOSE') { icon = '❌'; cls = 'has-text-danger'; }
+                else if (s.result_type === 'REFUND') { icon = '🔄'; cls = 'has-text-grey'; }
+                else { icon = '⏳'; cls = 'has-text-grey'; }
+
+                var isActive = s.strategy === pred.active_strategy;
+                var activeMark = isActive ? ' <span class="tag is-warning is-light is-small">ACTIVE</span>' : '';
+                var prefix = formatPointsPrefix(s.points_gained);
+
+                html += '<span class="dry-run-strategy-item ' + cls + '">';
+                html += icon + ' <strong>' + s.strategy + '</strong>';
+                html += ' → ' + (s.outcome_title || 'Outcome ' + s.choice);
+                if (s.result_type) html += ' (' + prefix + s.points_gained + ')';
+                html += activeMark;
+                html += '</span>';
+            });
+        }
+
+        html += '</div></div>';
+    });
+
+    html += '</div>';
+    $('#dry-run-history').html(html);
+}

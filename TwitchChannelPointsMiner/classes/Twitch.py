@@ -5,6 +5,7 @@
 
 
 import copy
+import json
 import logging
 import os
 import random
@@ -13,7 +14,6 @@ import string
 import time
 import requests
 import validators
-# import json
 
 from pathlib import Path
 from secrets import choice, token_hex
@@ -25,6 +25,7 @@ from typing import Dict, Any
 from TwitchChannelPointsMiner.classes.entities.Campaign import Campaign
 from TwitchChannelPointsMiner.classes.entities.CommunityGoal import CommunityGoal
 from TwitchChannelPointsMiner.classes.entities.Drop import Drop
+from TwitchChannelPointsMiner.classes.entities.Bet import Strategy
 from TwitchChannelPointsMiner.classes.Exceptions import (
     StreamerDoesNotExistException,
     StreamerIsOfflineException,
@@ -693,12 +694,63 @@ class Twitch(object):
             if streamer.settings.community_goals is True:
                 self.contribute_to_community_goals(streamer)
 
-            if streamer.settings.community_goals is True:
-                self.contribute_to_community_goals(streamer)
+    def _load_historical_outcomes(self, event):
+        """Load historical dry_run_predictions for the HISTORICAL strategy."""
+        if event.bet.settings.strategy != Strategy.HISTORICAL:
+            return
+        streamer = event.streamer
+        if not hasattr(Settings, "analytics_path") or not Settings.analytics_path:
+            return
+        analytics_file = os.path.join(
+            Settings.analytics_path, f"{streamer.username}.json"
+        )
+        if not os.path.isfile(analytics_file):
+            return
+        try:
+            with open(analytics_file, "r") as f:
+                data = json.load(f)
+            event.bet.settings.historical_outcomes = data.get(
+                "dry_run_predictions", []
+            )
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(
+                f"Failed to load historical outcomes for {streamer.username}: {e}"
+            )
 
     def make_predictions(self, event):
+        # Load historical outcomes for the HISTORICAL strategy
+        try:
+            self._load_historical_outcomes(event)
+        except Exception as e:
+            logger.debug(f"Could not load historical outcomes: {e}")
+
         decision = event.bet.calculate(event.streamer.channel_points)
-        # selector_index = 0 if decision["choice"] == "A" else 1
+
+        # Run dry-run for all strategies
+        try:
+            event.dry_run_results = event.bet.dry_run_all_strategies(
+                event.streamer.channel_points
+            )
+            active_strategy = str(event.bet.settings.strategy)
+            dry_run_lines = [
+                f"[DRY RUN] Strategy comparison for \"{event.title}\":"
+            ]
+            for dr in event.dry_run_results:
+                marker = " <-- ACTIVE" if dr.strategy_name == active_strategy else ""
+                dry_run_lines.append(
+                    f"  {dr.strategy_name:<15} -> Outcome {dr.choice}: "
+                    f"\"{dr.outcome_title}\" ({dr.outcome_color}) "
+                    f"- {_millify(dr.amount)} pts{marker}"
+                )
+            logger.info(
+                "\n".join(dry_run_lines),
+                extra={
+                    "emoji": ":crystal_ball:",
+                    "event": Events.BET_DRY_RUN,
+                },
+            )
+        except Exception:
+            logger.debug("Failed to run dry-run predictions", exc_info=True)
 
         logger.info(
             f"Going to complete bet for {event}",
@@ -727,7 +779,6 @@ class Twitch(object):
             else:
                 if decision["amount"] >= 10:
                     logger.info(
-                        # f"Place {_millify(decision['amount'])} channel points on: {event.bet.get_outcome(selector_index)}",
                         f"Place {_millify(decision['amount'])} channel points on: {event.bet.get_outcome(decision['choice'])}",
                         extra={
                             "emoji": ":four_leaf_clover:",
