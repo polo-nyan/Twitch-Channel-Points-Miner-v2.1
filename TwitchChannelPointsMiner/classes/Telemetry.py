@@ -669,10 +669,14 @@ class Telemetry:
                 result.append(st)
 
             result.sort(key=lambda x: x["net_points"], reverse=True)
-            if result:
-                result[0]["is_best"] = True
-                for r in result[1:]:
-                    r["is_best"] = False
+            # Mark is_best on the top non-ACTIVE strategy (ACTIVE cannot be
+            # switched to, so it should never be flagged as the actionable best)
+            for r in result:
+                r["is_best"] = False
+            for r in result:
+                if r["strategy"] != "ACTIVE":
+                    r["is_best"] = True
+                    break
             return result
         finally:
             conn.close()
@@ -883,11 +887,18 @@ class Telemetry:
                 conn.close()
 
     def get_best_strategy(self, streamer):
-        """Return the best-performing strategy name for a streamer, or None."""
+        """Return the best-performing switchable strategy name for a streamer.
+
+        Excludes ACTIVE since it is not a user-selectable strategy.
+        Returns None if no suitable strategy is found.
+        """
         summary = self.get_dry_run_summary(streamer)
         if not summary:
             return None
-        return summary[0]["strategy"]
+        for s in summary:
+            if s["strategy"] != "ACTIVE":
+                return s["strategy"]
+        return None
 
     def get_channel_log(self, streamer, limit=100):
         """Return a chronological event log for a streamer, combining events,

@@ -565,11 +565,39 @@ class Discord(object):
                     pass
 
         elif self.webhook_api:
-            # Webhook-only mode: can only delete messages sent by this webhook
-            # that we have stored IDs for (e.g. from logbook_state.json)
+            # Webhook-only mode: delete stored logbook message IDs via webhook DELETE
+            # (the only messages we *know* this webhook sent).
+            try:
+                from TwitchChannelPointsMiner.classes.Settings import Settings
+                state_path = os.path.join(Settings.analytics_path, "logbook_state.json")
+                if os.path.isfile(state_path):
+                    with open(state_path, "r", encoding="utf-8") as _fh:
+                        _state = json.load(_fh)
+                    parts = self.webhook_api.rstrip("/").split("/")
+                    if len(parts) >= 2:
+                        wh_id, wh_token = parts[-2], parts[-1]
+                        for _msg_id in _state.values():
+                            if not _msg_id:
+                                continue
+                            self._rate_limiter.acquire()
+                            try:
+                                resp = requests.delete(
+                                    f"https://discord.com/api/v10/webhooks/{wh_id}/{wh_token}/messages/{_msg_id}",
+                                    timeout=10,
+                                )
+                                if resp.status_code in (204, 404):
+                                    deleted += 1
+                                    self._rate_limiter.report_success()
+                                elif resp.status_code == 429:
+                                    self._rate_limiter.report_rate_limited()
+                            except requests.RequestException:
+                                pass
+            except Exception:
+                logger.warning("purge_all_messages: failed to delete stored logbook messages", exc_info=True)
             logger.warning(
-                "purge_all_messages: webhook-only mode — cannot list channel history. "
-                "Configure bot_token + channel_id for full purge support."
+                "purge_all_messages: webhook-only mode — deleted %d stored logbook message(s). "
+                "For full channel purge configure bot_token + channel_id.",
+                deleted,
             )
 
         return deleted

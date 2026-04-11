@@ -1995,6 +1995,23 @@ def _build_logbook_payload(streamer: str, telemetry, limit: int = 50):
 
     entries = telemetry.get_channel_log(streamer, limit=limit)
 
+    # Deduplicate consecutive same-type stream status events (e.g. repeated
+    # "Stream Offline" entries from reconnect loops polluting the logbook).
+    _STREAM_STATUS = {
+        "streamer_online": "online",  "STREAMER_ONLINE": "online",
+        "streamer_offline": "offline", "STREAMER_OFFLINE": "offline",
+    }
+    _last_status: str | None = None
+    deduped: list = []
+    for _e in entries:
+        _canonical = _STREAM_STATUS.get(_e.get("event_type", ""))
+        if _canonical is not None:
+            if _canonical == _last_status:
+                continue  # skip consecutive duplicate status event
+            _last_status = _canonical
+        deduped.append(_e)
+    entries = deduped
+
     wins = losses = 0
     net_pts = 0
     lines = []

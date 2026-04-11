@@ -414,6 +414,7 @@ function switchStrategy(strategyName, streamerName) {
         data: JSON.stringify({ strategy: strategyName, streamer: scope }),
         success: function (resp) {
             var msg = resp.message || ('Switched to ' + strategyName);
+            alert(msg);
             // Reload config and refresh dry-run immediately
             $.post('./api/config/reload');
             if (typeof currentStreamer !== 'undefined' && currentStreamer) {
@@ -606,16 +607,23 @@ function renderDryRunSummary(summary, currentStrategy, streamerName) {
 
     var csUpper = (currentStrategy || '').toUpperCase();
 
-    // Find best net_points to calculate relative performance
-    var bestNet = summary.length > 0 ? summary[0].net_points : 0; // already sorted desc
-    var bestStrat = summary.length > 0 ? summary[0].strategy : '';
+    // Find best switchable strategy (skip ACTIVE — it cannot be configured directly)
+    var bestNet = 0;
+    var bestStrat = '';
+    for (var bi = 0; bi < summary.length; bi++) {
+        if (summary[bi].strategy !== 'ACTIVE') {
+            bestStrat = summary[bi].strategy;
+            bestNet = summary[bi].net_points;
+            break;
+        }
+    }
 
     // Action buttons row
     var actions = '<div style="display:flex; gap:0.5rem; margin-bottom:0.75rem; flex-wrap:wrap; align-items:center;">';
     if (csUpper) {
         actions += '<span style="font-size:0.85rem; color:#9da2b8;">Current: <strong style="color:#f0c040;">' + csUpper + '</strong></span>';
     }
-    if (bestStrat && bestStrat !== 'ACTIVE' && bestStrat.toUpperCase() !== csUpper) {
+    if (bestStrat && bestStrat.toUpperCase() !== csUpper) {
         actions += '<button class="btn-switch" onclick="switchStrategy(\'' + bestStrat + '\', \'' + (streamerName || '') + '\')">⚡ Use ' + bestStrat + '</button>';
     }
     actions += '<button class="btn-switch-sm" onclick="switchStrategyAll()" title="Apply best strategy to all channels">🌐 Best → All</button>';
@@ -647,11 +655,10 @@ function renderDryRunSummary(summary, currentStrategy, streamerName) {
         var pointsColor = s.net_points >= 0 ? 'color:#36b535' : 'color:#ff4545';
         var pointsPrefix = formatPointsPrefix(s.net_points);
 
-        // vs best calculation
+        // vs best calculation (ACTIVE shows its positive diff; is_best row shows '—')
         var diff = s.net_points - bestNet;
-        var diffStr = idx === 0 ? '—' : (diff >= 0 ? '+' : '') + diff;
-        var diffColor = diff >= 0 ? 'color:#36b535' : 'color:#ff4545';
-        if (idx === 0) diffColor = 'color:#9da2b8';
+        var diffStr = s.is_best ? '—' : (diff >= 0 ? '+' : '') + diff.toLocaleString();
+        var diffColor = s.is_best ? 'color:#9da2b8' : (diff >= 0 ? 'color:#36b535' : 'color:#ff4545');
 
         html += '<tr class="' + rowClass + '">';
         html += '<td><strong>' + s.strategy + '</strong></td>';
