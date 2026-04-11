@@ -130,12 +130,32 @@
 
                     <!-- Discord Controls -->
                     <div style="margin-top:0.75rem; padding:0.75rem; border-top:1px solid rgba(255,255,255,0.1);">
-                        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; font-size:0.85rem;">
+                        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; font-size:0.85rem; margin-bottom:0.4rem;">
                             <strong style="color:#9da2b8;"><i class="fab fa-discord"></i> Discord:</strong>
+                            <span id="discord-status-badge" title="Checking…">⏳</span>
                             <button class="btn btn-sm" onclick="sendDiscordSummary()" title="Send summary embeds to Discord">📊 Send Summary</button>
                             <button class="btn btn-sm" onclick="sendChannelLog()" title="Send channel event logbook to Discord">📖 Channel Log</button>
                             <button class="btn btn-sm" onclick="runDiscordCleanup()" title="Clean up old messages and repost as organized embeds (backs up to DB first)">🧹 Cleanup &amp; Organize</button>
                             <button class="btn btn-sm" onclick="runDiscordPurge()" title="Delete ALL channel messages and rebuild one logbook per streamer (requires bot_token + channel_id)">🔥 Purge &amp; Rebuild</button>
+                            <button class="btn btn-sm" id="mute-panel-toggle" onclick="toggleMutePanel()" title="Configure mute settings">🔕 Mutes</button>
+                        </div>
+                        <!-- Mute Panel -->
+                        <div id="discord-mute-panel" style="display:none; padding:0.6rem 0.75rem; border:1px solid rgba(255,255,255,0.1); border-radius:6px; margin-top:0.25rem;">
+                            <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">Channel Mute</div>
+                            <div style="font-size:0.8rem; margin-bottom:0.6rem;">
+                                <label id="channel-mute-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                    <input type="checkbox" id="channel-mute-checkbox" onchange="toggleChannelMute(this)" disabled>
+                                    <span id="channel-mute-name" style="color:#9da2b8;">Select a streamer first</span>
+                                </label>
+                            </div>
+                            <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">Global Event Mutes</div>
+                            <div id="global-event-mutes" style="display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.6rem;"></div>
+                            <div id="channel-event-mutes-section" style="display:none;">
+                                <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">
+                                    Channel Event Mutes — <span id="channel-event-mutes-chan" style="color:#cba6f7;"></span>
+                                </div>
+                                <div id="channel-event-mutes" style="display:flex; flex-wrap:wrap; gap:0.3rem;"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -154,6 +174,17 @@
         </div>
     </div>
 </body>
+
+<!-- Strategy Switch All Results Modal -->
+<div id="strategy-all-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:2000; align-items:center; justify-content:center;">
+    <div style="background:#1e1e2e; border-radius:8px; padding:1.5rem; max-width:520px; width:92%; max-height:72vh; overflow-y:auto; border:1px solid #45475a; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <strong style="color:#cdd6f4; font-size:0.95rem;">🌐 Strategy Switch Results</strong>
+            <button onclick="document.getElementById('strategy-all-modal').style.display='none'" style="background:none; border:none; color:#9da2b8; cursor:pointer; font-size:1.2rem; line-height:1;">✕</button>
+        </div>
+        <div id="strategy-all-modal-content"></div>
+    </div>
+</div>
 
 <script type="text/javascript">
     // Flask template variables must be injected here (can't access in external JS)

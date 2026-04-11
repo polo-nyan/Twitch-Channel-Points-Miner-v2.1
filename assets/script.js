@@ -205,6 +205,8 @@ $(document).ready(function () {
 
     // Global stats
     loadGlobalStats();
+    // Discord connection status badge
+    loadDiscordStatus();
 });
 
 function formatDate(date) {
@@ -220,8 +222,10 @@ function formatDate(date) {
 }
 
 function changeStreamer(streamer, index) {
+    // Use ID-based class assignment so group-header <li>s don't skew the index
     $("#streamers-list li").removeClass("active");
-    $("#streamers-list li").eq(index).addClass('active');
+    var el = document.getElementById('streamer-' + streamer);
+    if (el) el.classList.add('active');
     currentStreamer = streamer;
 
     options.title.text = `${streamer.replace(".json", "")}'s channel points (dates are displayed in UTC)`;
@@ -232,6 +236,13 @@ function changeStreamer(streamer, index) {
 
     if ($('#dry-run').prop('checked')) {
         loadDryRunData(streamer);
+    }
+
+    // Refresh mute panel channel-section if it's open
+    if ($('#discord-mute-panel').is(':visible') && _currentMutes !== null) {
+        $.ajax({ url: './api/discord/status', method: 'GET', success: function(s) {
+            loadChannelMuteForCurrent(s.all_events || []);
+        }});
     }
 }
 
@@ -284,33 +295,148 @@ function getStreamers() {
         // Ensure the selected streamer is still active and scrolled into view
         renderStreamers();
     });
+
+    // Auto-refresh streamer list every 60 seconds (live status + points)
+    if (!getStreamers._refreshTimer) {
+        getStreamers._refreshTimer = setInterval(function () {
+            $.getJSON('streamers', function (response) {
+                streamersList = response;
+                sortStreamers();
+                renderStreamers();
+            });
+        }, 60000);
+    }
 }
 
+var _openMenu = null; // currently open context-menu element
+
 function renderStreamers() {
+    closeStreamerMenu();
     $("#streamers-list").empty();
     var selectedStreamer = localStorage.getItem("selectedStreamer");
-    streamersList.forEach((streamer, index) => {
-        var displayname = streamer.name.replace(".json", "");
-        var pointsHtml = streamer.points ? '<span class="streamer-points">' + streamer.points.toLocaleString() + '</span>' : '';
-        var isActive = currentStreamer === streamer.name;
-        if (!isActive && !selectedStreamer && index === 0) {
-            isActive = true;
-            currentStreamer = streamer.name;
-        }
-        var activeClass = isActive ? ' active' : '';
-        var li = `<li id="streamer-${streamer.name}" class="${activeClass}" onclick="changeStreamer('${streamer.name}', ${index}); return false;">
-            <span>${displayname}</span>${pointsHtml}
-        </li>`;
-        $("#streamers-list").append(li);
-    });
+
+    var liveStreamers    = streamersList.filter(function(s) { return s.is_online; });
+    var offlineStreamers = streamersList.filter(function(s) { return !s.is_online; });
+
+    function renderGroup(list) {
+        list.forEach(function (streamer) {
+            var displayname = streamer.name.replace(".json", "");
+            var pts = streamer.points;
+            var pointsHtml = pts ? '<span class="streamer-points">' + pts.toLocaleString() + '</span>' : '';
+            var isActive = currentStreamer === streamer.name;
+            if (!isActive && !selectedStreamer && streamersList.indexOf(streamer) === 0) {
+                isActive = true;
+                currentStreamer = streamer.name;
+            }
+            var activeClass = isActive ? ' active' : '';
+            var onlineClass = streamer.is_online ? ' streamer-live' : '';
+            var mutedClass  = (_currentMutes && _currentMutes.muted_channels.indexOf(displayname.toLowerCase()) >= 0) ? ' streamer-muted' : '';
+            var dot = streamer.is_online
+                ? '<span class="streamer-dot live" title="Live">🟢</span>'
+                : '<span class="streamer-dot" title="Offline">⚫</span>';
+
+            // Relative last-activity time
+            var relTime = '';
+            if (streamer.last_activity) {
+                var diffMs = Date.now() - streamer.last_activity;
+                var diffH = Math.floor(diffMs / 3600000);
+                if (diffH < 1) relTime = '<span class="streamer-rel-time">' + Math.floor(diffMs / 60000) + 'm</span>';
+                else if (diffH < 24) relTime = '<span class="streamer-rel-time">' + diffH + 'h</span>';
+                else relTime = '<span class="streamer-rel-time">' + Math.floor(diffH / 24) + 'd</span>';
+            }
+
+            var li = '<li id="streamer-' + streamer.name + '" class="' + activeClass + onlineClass + mutedClass + '"' +
+                ' onclick="changeStreamer(\'' + streamer.name + '\', 0); return false;">' +
+                dot +
+                '<span class="streamer-name">' + displayname + '</span>' +
+                '<span class="streamer-info">' + pointsHtml + relTime + '</span>' +
+                '<button class="streamer-action-btn" onclick="event.stopPropagation(); showStreamerMenu(\'' + streamer.name + '\', this)" title="Actions">⋯</button>' +
+                '</li>';
+            $("#streamers-list").append(li);
+        });
+    }
+
+    if (liveStreamers.length > 0) {
+        $("#streamers-list").append('<li class="streamer-group-header">🟢 Live (' + liveStreamers.length + ')</li>');
+        renderGroup(liveStreamers);
+    }
+    if (offlineStreamers.length > 0) {
+        $("#streamers-list").append('<li class="streamer-group-header">⚫ Offline (' + offlineStreamers.length + ')</li>');
+        renderGroup(offlineStreamers);
+    }
+
     if (currentStreamer) {
-        var idx = streamersList.findIndex(s => s.name === currentStreamer);
+        var idx = streamersList.findIndex(function(s) { return s.name === currentStreamer; });
         if (idx >= 0) {
             changeStreamer(currentStreamer, idx);
             var el = document.getElementById('streamer-' + currentStreamer);
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }
+}
+
+// === STREAMER CONTEXT MENU === //
+
+function showStreamerMenu(streamerName, btn) {
+    closeStreamerMenu();
+    var displayname = streamerName.replace('.json', '');
+
+    var menu = document.createElement('div');
+    menu.className = 'streamer-menu-dropdown';
+    menu.innerHTML =
+        '<div class="streamer-menu-item" onclick="changeStreamer(\'' + streamerName + '\', 0); closeStreamerMenu()">📊 View Chart</div>' +
+        '<div class="streamer-menu-item" onclick="sendChannelLogForStreamer(\'' + displayname + '\'); closeStreamerMenu()">📖 Send Discord Log</div>' +
+        '<div class="streamer-menu-item" onclick="quickMuteToggle(\'' + displayname + '\'); closeStreamerMenu()">🔕 Toggle Mute</div>' +
+        '<div class="streamer-menu-item" onclick="changeStreamer(\'' + streamerName + '\', 0); $(\'#dry-run\').prop(\'checked\', true); $(\'#dry-run-box\').show(); loadDryRunData(\'' + streamerName + '\'); closeStreamerMenu()">🎲 View Strategy</div>';
+
+    // Position near the trigger button
+    var rect = btn.getBoundingClientRect();
+    menu.style.cssText = 'position:fixed; z-index:3000; top:' + (rect.bottom + 4) + 'px; left:' + Math.max(4, rect.right - 150) + 'px;';
+    document.body.appendChild(menu);
+    _openMenu = menu;
+
+    // Close on any outside click
+    setTimeout(function () {
+        $(document).one('click.streamerMenu', function () { closeStreamerMenu(); });
+    }, 0);
+}
+
+function closeStreamerMenu() {
+    if (_openMenu) { _openMenu.remove(); _openMenu = null; }
+    $(document).off('click.streamerMenu');
+}
+
+function quickMuteToggle(channelName) {
+    var lowerName = channelName.toLowerCase();
+    if (!_currentMutes) {
+        // Load first
+        $.getJSON('./api/discord/mutes', function (mutes) {
+            _currentMutes = mutes;
+            _doQuickMuteToggle(lowerName);
+        });
+        return;
+    }
+    _doQuickMuteToggle(lowerName);
+}
+
+function _doQuickMuteToggle(lowerName) {
+    var idx = _currentMutes.muted_channels.indexOf(lowerName);
+    if (idx >= 0) _currentMutes.muted_channels.splice(idx, 1);
+    else _currentMutes.muted_channels.push(lowerName);
+    saveMuteState(function () { renderStreamers(); });
+}
+
+function sendChannelLogForStreamer(channelName) {
+    $.ajax({
+        url: './api/discord/channel_log?streamer=' + encodeURIComponent(channelName) + '&limit=100',
+        method: 'POST',
+        success: function () { /* silent success */ },
+        error: function (xhr) {
+            var err = 'Failed';
+            try { err = JSON.parse(xhr.responseText).error || err; } catch (e) {}
+            alert('Channel log failed: ' + err);
+        }
+    });
 }
 
 function sortStreamers() {
@@ -438,10 +564,30 @@ function switchStrategyAll() {
         data: JSON.stringify({}),
         success: function (resp) {
             var count = resp.count || 0;
-            var details = (resp.switched || []).map(function(s) {
-                return s.streamer + ': ' + s.old + ' → ' + s.new;
-            }).join('\n');
-            alert('Switched ' + count + ' channel(s).\n' + details);
+            var switched = resp.switched || [];
+
+            var html = '<p style="color:#9da2b8; margin-bottom:0.75rem; font-size:0.85rem;">Switched <strong style="color:#cdd6f4;">' + count + '</strong> channel(s)</p>';
+            if (switched.length > 0) {
+                html += '<table style="width:100%; border-collapse:collapse; font-size:0.8rem;">';
+                html += '<thead><tr style="border-bottom:1px solid #45475a;">' +
+                    '<th style="text-align:left; padding:0.3rem 0.5rem; color:#9da2b8;">Channel</th>' +
+                    '<th style="text-align:left; padding:0.3rem 0.5rem; color:#9da2b8;">Old</th>' +
+                    '<th style="text-align:left; padding:0.3rem 0.5rem; color:#9da2b8;">New</th>' +
+                    '</tr></thead><tbody>';
+                switched.forEach(function (s) {
+                    html += '<tr style="border-bottom:1px solid #313244;">' +
+                        '<td style="padding:0.3rem 0.5rem; color:#cdd6f4;">' + s.streamer + '</td>' +
+                        '<td style="padding:0.3rem 0.5rem; color:#ff4545;">' + (s.old || '—') + '</td>' +
+                        '<td style="padding:0.3rem 0.5rem; color:#36b535;">' + s.new + '</td>' +
+                        '</tr>';
+                });
+                html += '</tbody></table>';
+            } else {
+                html += '<p style="color:#9da2b8; font-size:0.85rem;">No changes required — all channels already on optimal strategy.</p>';
+            }
+            $('#strategy-all-modal-content').html(html);
+            $('#strategy-all-modal').css('display', 'flex');
+
             $.post('./api/config/reload');
             if (typeof currentStreamer !== 'undefined' && currentStreamer) {
                 loadDryRunData(currentStreamer);
@@ -454,6 +600,11 @@ function switchStrategyAll() {
         }
     });
 }
+
+// Close modal on overlay click
+$(document).on('click', '#strategy-all-modal', function (e) {
+    if (e.target === this) $(this).hide();
+});
 
 function loadAutoAdjustConfig() {
     $.getJSON('./api/strategy/auto_adjust', function (cfg) {
@@ -595,6 +746,173 @@ function handleDBImport(fileInput) {
             alert(err);
             fileInput.value = '';
         }
+    });
+}
+
+
+// === DISCORD STATUS + MUTE PANEL === //
+
+var _currentMutes = null; // cache: {muted_channels, muted_events_per_channel, global_muted_events}
+var _allDiscordEvents = []; // cache: [{event, icon, category}, ...]
+
+function loadDiscordStatus() {
+    $.ajax({
+        url: './api/discord/status',
+        method: 'GET',
+        success: function (status) {
+            var badge = $('#discord-status-badge');
+            if (status.configured) {
+                var parts = [];
+                if (status.webhook_set) parts.push('webhook');
+                if (status.bot_set) parts.push('bot');
+                var tip = 'Discord configured: ' + parts.join(', ');
+                badge.html('<span style="color:#36b535; font-size:0.75rem;" title="' + tip + '">✅ Connected</span>');
+            } else {
+                badge.html('<span style="color:#ff4545; font-size:0.75rem;" title="Discord not configured in settings.json">❌ Not configured</span>');
+            }
+            // Cache mute state and event list
+            _currentMutes = {
+                muted_channels: status.muted_channels || [],
+                muted_events_per_channel: status.muted_events_per_channel || {},
+                global_muted_events: status.global_muted_events || [],
+            };
+            _allDiscordEvents = status.all_events || [];
+            // Re-render sidebar mute classes
+            refreshStreamerMuteIcons();
+        },
+        error: function () {
+            $('#discord-status-badge').html('<span style="color:#888; font-size:0.75rem;">⚠️ ?</span>');
+        }
+    });
+}
+
+function toggleMutePanel() {
+    var panel = $('#discord-mute-panel');
+    if (panel.is(':visible')) {
+        panel.slideUp(150);
+    } else {
+        panel.slideDown(150);
+        loadMutePanel();
+    }
+}
+
+function loadMutePanel() {
+    $.ajax({
+        url: './api/discord/status',
+        method: 'GET',
+        success: function (status) {
+            _currentMutes = {
+                muted_channels: status.muted_channels || [],
+                muted_events_per_channel: status.muted_events_per_channel || {},
+                global_muted_events: status.global_muted_events || [],
+            };
+            _allDiscordEvents = status.all_events || [];
+            _renderGlobalEventMutes();
+            loadChannelMuteForCurrent(_allDiscordEvents);
+        },
+        error: function () {
+            $('#discord-mute-panel').html('<p style="font-size:0.8rem; color:#ff4545;">Failed to load Discord status.</p>');
+        }
+    });
+}
+
+function _renderGlobalEventMutes() {
+    var html = '';
+    _allDiscordEvents.forEach(function (ev) {
+        var isMuted = _currentMutes && _currentMutes.global_muted_events.indexOf(ev.event) >= 0;
+        var cls = 'event-chip' + (isMuted ? ' event-chip-muted' : '');
+        html += '<button class="' + cls + '" onclick="toggleGlobalMute(\'' + ev.event + '\')" title="Global mute: ' + ev.event + '">' +
+            ev.icon + ' ' + ev.event.replace(/_/g, ' ') + '</button>';
+    });
+    $('#global-event-mutes').html(html || '<span style="font-size:0.75rem; color:#9da2b8;">No events available.</span>');
+}
+
+function _renderChannelEventMutes(channelName) {
+    var html = '';
+    var chanMuted = (_currentMutes && _currentMutes.muted_events_per_channel[channelName]) || [];
+    _allDiscordEvents.forEach(function (ev) {
+        var isMuted = chanMuted.indexOf(ev.event) >= 0;
+        var cls = 'event-chip event-chip-sm' + (isMuted ? ' event-chip-muted' : '');
+        html += '<button class="' + cls + '" onclick="toggleChannelEventMute(\'' + channelName + '\', \'' + ev.event + '\')" title="Mute for ' + channelName + ': ' + ev.event + '">' +
+            ev.icon + ' ' + ev.event.replace(/_/g, ' ') + '</button>';
+    });
+    $('#channel-event-mutes').html(html || '<span style="font-size:0.75rem; color:#9da2b8;">No events available.</span>');
+}
+
+function loadChannelMuteForCurrent(allEvents) {
+    if (allEvents && allEvents.length > 0) _allDiscordEvents = allEvents;
+    if (!currentStreamer) {
+        $('#channel-mute-name').text('Select a streamer first');
+        $('#channel-mute-checkbox').prop('disabled', true).prop('checked', false);
+        $('#channel-event-mutes-section').hide();
+        return;
+    }
+    var name = currentStreamer.replace('.json', '').toLowerCase();
+    var isMuted = _currentMutes && _currentMutes.muted_channels.indexOf(name) >= 0;
+    $('#channel-mute-name').text('Mute entire channel: ' + name);
+    $('#channel-mute-checkbox').prop('checked', isMuted).prop('disabled', false);
+    $('#channel-event-mutes-chan').text(name);
+    $('#channel-event-mutes-section').show();
+    _renderChannelEventMutes(name);
+}
+
+function toggleChannelMute(checkbox) {
+    if (!currentStreamer) return;
+    if (!_currentMutes) _currentMutes = { muted_channels: [], muted_events_per_channel: {}, global_muted_events: [] };
+    var name = currentStreamer.replace('.json', '').toLowerCase();
+    if (checkbox.checked) {
+        if (_currentMutes.muted_channels.indexOf(name) < 0) _currentMutes.muted_channels.push(name);
+    } else {
+        var idx = _currentMutes.muted_channels.indexOf(name);
+        if (idx >= 0) _currentMutes.muted_channels.splice(idx, 1);
+    }
+    saveMuteState(function () { refreshStreamerMuteIcons(); });
+}
+
+function toggleGlobalMute(eventName) {
+    if (!_currentMutes) _currentMutes = { muted_channels: [], muted_events_per_channel: {}, global_muted_events: [] };
+    var idx = _currentMutes.global_muted_events.indexOf(eventName);
+    if (idx >= 0) _currentMutes.global_muted_events.splice(idx, 1);
+    else _currentMutes.global_muted_events.push(eventName);
+    saveMuteState();
+    _renderGlobalEventMutes();
+}
+
+function toggleChannelEventMute(channelName, eventName) {
+    if (!_currentMutes) _currentMutes = { muted_channels: [], muted_events_per_channel: {}, global_muted_events: [] };
+    if (!_currentMutes.muted_events_per_channel[channelName]) _currentMutes.muted_events_per_channel[channelName] = [];
+    var arr = _currentMutes.muted_events_per_channel[channelName];
+    var idx = arr.indexOf(eventName);
+    if (idx >= 0) {
+        arr.splice(idx, 1);
+        if (arr.length === 0) delete _currentMutes.muted_events_per_channel[channelName];
+    } else {
+        arr.push(eventName);
+    }
+    saveMuteState();
+    _renderChannelEventMutes(channelName);
+}
+
+function saveMuteState(callback) {
+    if (!_currentMutes) return;
+    $.ajax({
+        url: './api/discord/mutes',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(_currentMutes),
+        success: function () { if (callback) callback(); },
+        error: function () { console.warn('Failed to save mute state to server'); }
+    });
+}
+
+function refreshStreamerMuteIcons() {
+    if (!_currentMutes) return;
+    streamersList.forEach(function (s) {
+        var name = s.name.replace('.json', '').toLowerCase();
+        var li = document.getElementById('streamer-' + s.name);
+        if (!li) return;
+        var isMuted = _currentMutes.muted_channels.indexOf(name) >= 0;
+        $(li).toggleClass('streamer-muted', isMuted);
     });
 }
 

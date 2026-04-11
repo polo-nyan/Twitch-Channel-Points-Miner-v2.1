@@ -183,6 +183,46 @@ def get_last_activity(streamer):
     return 0  # Default value when 'series' key is not found or empty
 
 
+def _get_streamers_online_status() -> dict:
+    """Return {channel_name_lower: bool} indicating live status from telemetry events table.
+    Uses the most-recent STREAMER_ONLINE / STREAMER_OFFLINE event per channel."""
+    try:
+        import sqlite3 as _sqlite3
+        db_path = os.path.join(Settings.analytics_path, "telemetry.db")
+        if not os.path.isfile(db_path):
+            return {}
+        conn = _sqlite3.connect(db_path)
+        conn.row_factory = _sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT e1.streamer, e1.event_type
+            FROM events e1
+            INNER JOIN (
+                SELECT streamer, MAX(timestamp) AS ts
+                FROM events
+                WHERE event_type IN (
+                    'STREAMER_ONLINE','streamer_online',
+                    'STREAMER_OFFLINE','streamer_offline'
+                )
+                  AND streamer IS NOT NULL AND streamer != ''
+                GROUP BY streamer
+            ) e2 ON e1.streamer = e2.streamer AND e1.timestamp = e2.ts
+            WHERE e1.event_type IN (
+                'STREAMER_ONLINE','streamer_online',
+                'STREAMER_OFFLINE','streamer_offline'
+            )
+            """
+        ).fetchall()
+        conn.close()
+        return {
+            r["streamer"].lower(): r["event_type"].upper() == "STREAMER_ONLINE"
+            for r in rows
+        }
+    except Exception:
+        logger.debug("Could not determine streamer online status", exc_info=True)
+        return {}
+
+
 def json_all():
     return Response(
         json.dumps(
@@ -208,11 +248,16 @@ def index(refresh=5, days_ago=7):
 
 
 def streamers():
+    online_map = _get_streamers_online_status()
     return Response(
         json.dumps(
             [
-                {"name": s, "points": get_challenge_points(
-                    s), "last_activity": get_last_activity(s)}
+                {
+                    "name": s,
+                    "points": get_challenge_points(s),
+                    "last_activity": get_last_activity(s),
+                    "is_online": online_map.get(s.replace(".json", "").lower(), False),
+                }
                 for s in sorted(streamers_available())
             ]
         ),
@@ -2150,6 +2195,150 @@ def discord_channel_log():
     )
 
 
+def discord_mutes():
+    """GET: return current Discord mute settings.
+    POST: write updated mute settings to settings.json and update the runtime Discord instance."""
+    cfg, settings_path = _read_settings_json()
+
+    if request.method == "GET":
+        if cfg is None:
+            return Response(
+                json.dumps({
+                    "muted_channels": [],
+                    "muted_events_per_channel": {},
+                    "global_muted_events": [],
+                }),
+                status=200,
+                mimetype="application/json",
+            )
+        dc_cfg = cfg.get("discord") or (cfg.get("logger") or {}).get("discord") or {}
+        return Response(
+            json.dumps({
+                "muted_channels": dc_cfg.get("muted_channels", []),
+                "muted_events_per_channel": dc_cfg.get("muted_events_per_channel", {}),
+                "global_muted_events": dc_cfg.get("global_muted_events", []),
+            }),
+            status=200,
+            mimetype="application/json",
+        )
+
+    # POST — update
+    if cfg is None:
+        return Response(
+            json.dumps({"error": "No settings.json found."}),
+            status=404,
+            mimetype="application/json",
+        )
+
+    data = request.get_json(silent=True) or {}
+    muted_channels = data.get("muted_channels")
+    muted_events_per_channel = data.get("muted_events_per_channel")
+    global_muted_events = data.get("global_muted_events")
+
+    # Locate the discord config block in settings.json
+    dc_cfg = cfg.get("discord")
+    if dc_cfg is None:
+        dc_cfg = (cfg.get("logger") or {}).get("discord")
+    if dc_cfg is None:
+        return Response(
+            json.dumps({"error": "Discord not configured in settings.json."}),
+            status=400,
+            mimetype="application/json",
+        )
+
+    if isinstance(muted_channels, list):
+        dc_cfg["muted_channels"] = [str(c).lower() for c in muted_channels]
+    if isinstance(muted_events_per_channel, dict):
+        dc_cfg["muted_events_per_channel"] = {
+            str(k).lower(): [str(e) for e in v]
+            for k, v in muted_events_per_channel.items()
+        }
+    if isinstance(global_muted_events, list):
+        dc_cfg["global_muted_events"] = [str(e) for e in global_muted_events]
+
+    try:
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=4)
+    except Exception as e:
+        return Response(
+            json.dumps({"error": str(e)}),
+            status=500,
+            mimetype="application/json",
+        )
+
+    # Update the live runtime Discord instance if available
+    from TwitchChannelPointsMiner.classes.Settings import Settings as MinerSettings
+    discord_rt = getattr(getattr(MinerSettings, "logger", None), "discord", None)
+    runtime_updated = False
+    if discord_rt is not None:
+        if isinstance(muted_channels, list):
+            discord_rt.muted_channels = [str(c).lower() for c in muted_channels]
+        if isinstance(muted_events_per_channel, dict):
+            discord_rt.muted_events_per_channel = {
+                str(k).lower(): [str(e) for e in v]
+                for k, v in muted_events_per_channel.items()
+            }
+        if isinstance(global_muted_events, list):
+            discord_rt.global_muted_events = [str(e) for e in global_muted_events]
+        runtime_updated = True
+
+    return Response(
+        json.dumps({
+            "success": True,
+            "muted_channels": dc_cfg.get("muted_channels", []),
+            "muted_events_per_channel": dc_cfg.get("muted_events_per_channel", {}),
+            "global_muted_events": dc_cfg.get("global_muted_events", []),
+            "runtime_updated": runtime_updated,
+        }),
+        status=200,
+        mimetype="application/json",
+    )
+
+
+def discord_status():
+    """Return Discord configuration status, event list, and current mute settings."""
+    from TwitchChannelPointsMiner.classes.Discord import EVENT_ICONS, EVENT_CATEGORIES
+
+    discord = _get_discord()
+    cfg, _ = _read_settings_json()
+    dc_cfg = (cfg or {}).get("discord") or ((cfg or {}).get("logger") or {}).get("discord") or {}
+
+    configured = discord is not None
+    webhook_set = bool(dc_cfg.get("webhook_api") or (discord and discord.webhook_api))
+    bot_set = bool(dc_cfg.get("bot_token") or (discord and discord.bot_token))
+
+    if discord:
+        muted_channels = list(discord.muted_channels)
+        muted_events_per_channel = dict(discord.muted_events_per_channel)
+        global_muted_events = list(discord.global_muted_events)
+        subscribed_events = list(discord.events)
+    else:
+        muted_channels = dc_cfg.get("muted_channels", [])
+        muted_events_per_channel = dc_cfg.get("muted_events_per_channel", {})
+        global_muted_events = dc_cfg.get("global_muted_events", [])
+        subscribed_events = [str(e) for e in dc_cfg.get("events", [])]
+
+    all_events = [
+        {"event": k, "icon": v, "category": EVENT_CATEGORIES.get(k, "General")}
+        for k, v in EVENT_ICONS.items()
+    ]
+
+    return Response(
+        json.dumps({
+            "configured": configured,
+            "webhook_set": webhook_set,
+            "bot_set": bot_set,
+            "muted_channels": muted_channels,
+            "muted_events_per_channel": muted_events_per_channel,
+            "global_muted_events": global_muted_events,
+            "subscribed_events": subscribed_events,
+            "all_events": all_events,
+        }),
+        status=200,
+        mimetype="application/json",
+    )
+
+
 def telemetry_export_db():
     """Download the telemetry.db file directly."""
     global _telemetry
@@ -2499,6 +2688,18 @@ class AnalyticsServer(Thread):
             "discord_channel_log",
             discord_channel_log,
             methods=["POST"],
+        )
+        self.app.add_url_rule(
+            "/api/discord/mutes",
+            "discord_mutes",
+            discord_mutes,
+            methods=["GET", "POST"],
+        )
+        self.app.add_url_rule(
+            "/api/discord/status",
+            "discord_status",
+            discord_status,
+            methods=["GET"],
         )
         self.app.add_url_rule(
             "/api/telemetry/export/db",

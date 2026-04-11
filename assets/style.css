@@ -413,3 +413,124 @@ a { text-decoration: none; }
 
 /* hidden utility */
 .hidden { display: none !important; }
+
+/* === STREAMER STATUS & GROUPING === */
+
+.streamer-group-header {
+    padding: 0.2rem 0.75rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #888;
+    background: rgba(0, 0, 0, 0.03);
+    cursor: default;
+    pointer-events: none;
+    border-bottom: 1px solid #f0f0f0;
+    user-select: none;
+}
+
+.streamer-dot {
+    font-size: 0.55rem;
+    margin-right: 0.25rem;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.streamer-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.streamer-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    flex-shrink: 0;
+}
+
+.streamer-rel-time {
+    font-size: 0.62rem;
+    color: #aaa;
+    white-space: nowrap;
+}
+
+.streamer-list li.streamer-live {
+    border-left: 3px solid #36b535;
+}
+
+.streamer-list li.streamer-muted {
+    opacity: 0.55;
+}
+
+/* === STREAMER ACTION BUTTON (⋯) === */
+
+.streamer-action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 0.9rem;
+    opacity: 0;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    line-height: 1;
+    color: inherit;
+}
+.streamer-list li:hover .streamer-action-btn { opacity: 0.7; }
+.streamer-action-btn:hover { opacity: 1 !important; }
+
+/* === STREAMER CONTEXT MENU DROPDOWN === */
+
+.streamer-menu-dropdown {
+    background: #1e1e2e;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    min-width: 155px;
+    padding: 0.2rem 0;
+    animation: menuFadeIn 0.1s ease;
+}
+
+@keyframes menuFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.streamer-menu-item {
+    padding: 0.38rem 0.75rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.1s;
+    color: #cdd6f4;
+    user-select: none;
+}
+.streamer-menu-item:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* === EVENT CHIPS (mute toggles) === */
+
+.event-chip {
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    border: 1px solid #45475a;
+    border-radius: 12px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    color: inherit;
+    line-height: 1.6;
+}
+.event-chip:hover { border-color: #9146ff; color: #9146ff; }
+.event-chip-muted {
+    background: rgba(255, 69, 69, 0.12);
+    border-color: #ff4545;
+    color: #ff4545;
+}
+.event-chip-muted:hover { border-color: #ff4545; color: #ff4545; }
+.event-chip-sm { font-size: 0.63rem; padding: 1px 6px; }

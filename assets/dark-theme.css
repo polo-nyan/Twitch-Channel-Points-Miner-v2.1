@@ -87,3 +87,24 @@ a:hover { color: #f9826c; }
 
 ::-webkit-scrollbar-thumb { background-color: #3a3f55; }
 ::-webkit-scrollbar-thumb:hover { background-color: #4a5070; }
+
+/* === DARK: STREAMER GROUPS & STATUS === */
+.streamer-group-header {
+    background: rgba(255, 255, 255, 0.03);
+    color: #6b7090;
+    border-color: #2e3348;
+}
+.streamer-list li.streamer-live {
+    border-left-color: #36b535;
+}
+.streamer-rel-time { color: #6b7090; }
+
+/* === DARK: EVENT CHIPS === */
+.event-chip {
+    border-color: #3a3f55;
+    color: #9da2b8;
+}
+.event-chip:hover { border-color: #7c3aed; color: #a78bfa; }
+
+/* === DARK: STRATEGY MODAL close button === */
+#strategy-all-modal button { background: none; }

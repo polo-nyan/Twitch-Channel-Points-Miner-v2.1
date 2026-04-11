@@ -249,9 +249,14 @@ class Discord(object):
     def _build_session_payload(self, channel: str, latest_event_str: str) -> dict:
         """Build a Discord embed payload showing the current session's events."""
         chan_key = (channel or "_global").lower()
-        lines = self._session_cache.get(chan_key, [])
+        lines = list(self._session_cache.get(chan_key, []))
         color = EVENT_COLORS.get(latest_event_str, 0x7289DA)
         description = "\n".join(lines) if lines else "*Session starting\u2026*"
+        # Enforce Discord embed description limit (4096 chars; cap at 3900 for safety)
+        if len(description) > 3900:
+            while lines and len("\n".join(lines)) > 3900:
+                lines = lines[1:]
+            description = "\n".join(lines) if lines else "*…*"
         now_str = datetime.utcnow().strftime("%d %b %H:%M UTC")
         embed = {
             "title": f"\U0001f4fa {channel or 'Twitch'} \u2014 Live Activity",
@@ -289,7 +294,7 @@ class Discord(object):
         chan_key = (channel or "_global").lower()
         state_path = self._get_session_state_path()
 
-        # STREAMER_ONLINE: start a fresh session — clear cache and abandon old message
+        # STREAMER_ONLINE: start a fresh session — clear cache, abandon old message, inject delimiter
         if event_str == "STREAMER_ONLINE":
             self._session_cache[chan_key] = []
             if state_path and os.path.isfile(state_path):
@@ -302,10 +307,21 @@ class Discord(object):
                             json.dump(_st, _fh, indent=2)
                 except Exception:
                     pass
+            # Session start delimiter
+            now_hhmm = datetime.now().strftime("%H:%M")
+            self._session_cache[chan_key] = [f"\u2500\u2500\u2500 \U0001f7e2 Session started {now_hhmm} \u2500\u2500\u2500"]
 
         # Append formatted line and keep last 15 events
         line = self._format_session_line(event_str, message)
         self._session_cache.setdefault(chan_key, []).append(line)
+
+        # STREAMER_OFFLINE: append a session end marker before capping
+        if event_str == "STREAMER_OFFLINE":
+            now_hhmm = datetime.now().strftime("%H:%M")
+            self._session_cache[chan_key].append(
+                f"\u2500\u2500\u2500 \U0001f534 Offline {now_hhmm} \u2500\u2500\u2500"
+            )
+
         self._session_cache[chan_key] = self._session_cache[chan_key][-15:]
 
         if not state_path:
