@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Twitch-Channel-Points-Miner-v2</title>
+    <title>Twitch Channel Points Miner</title>
     <link rel="icon" type="image/png" sizes="32x32"
         href="https://static.twitchcdn.net/assets/favicon-32-e29e246c157142c94346.png">
     <link rel="icon" type="image/png" sizes="16x16"
@@ -12,215 +12,158 @@
 
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.42.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.css" rel="stylesheet" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.6.1/css/bulma.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet"
         integrity="sha512-1ycn6IcaQQ40/MKBW2W4Rhis/DbILU74C1vSrLJxCq57o941Ym01SwNsOMqvEBFlcgUa6xLiPY/NS5R+E6ztJQ=="
         crossorigin="anonymous" referrerpolicy="no-referrer" />
 
-    <link href="{{url_for('static', filename='dark-theme.css')}}" rel="stylesheet" />
     <link href="{{url_for('static', filename='style.css')}}" rel="stylesheet" />
-
+    <link href="{{url_for('static', filename='dark-theme.css')}}" rel="stylesheet" />
 </head>
 
-<body style="height: 100vh;">
-    <div class="container has-text-centered" style="height: 100vh;">
-        <div class="columns" id="header">
-            <div class="column has-text-right">
-                <a href="https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2" target="_blank"><img
-                        style="margin-top: -20px;" width="600px" src="{{url_for('static', filename='banner.png')}}"
-                        alt="banner"></a>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1><i class="fas fa-gem"></i> Twitch Channel Points Miner</h1>
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.85rem;">
+                    <input type="checkbox" checked id="dark-mode"> Dark
+                </label>
+                <a href="/config" class="btn btn-sm" title="Edit configuration"><i class="fas fa-cog"></i> Config</a>
             </div>
-            <div class="column is-4 has-text-left" style="margin-top: 35px;">
-                <table>
-                    <tr>
-                        <td><a href="https://github.com/Tkd-Alex" target="_blank">Tkd-Alex</a></td>
-                        <td><a href="https://github.com/rdavydov" target="_blank">rdavydov</a></td>
-                    </tr>
-                    <tr>
-                        <td><a href="https://github.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2/blob/master/LICENSE">
-                                <img alt="License"
-                                    src="https://img.shields.io/github/license/Tkd-Alex/Twitch-Channel-Points-Miner-v2" /></a>
-                        </td>
-                        <td><a href="https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2/blob/master/LICENSE">
-                                <img alt="License"
-                                    src="https://img.shields.io/github/license/rdavydov/Twitch-Channel-Points-Miner-v2" /></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="https://www.python.org/downloads/release/python-360/">
-                                <img alt="Python3"
-                                    src="https://img.shields.io/badge/built%20for-Python≥3.6-red.svg?style=flat"></a>
-                        </td>
-                        <td><a href="https://www.python.org/downloads/release/python-360/">
-                                <img alt="Python3"
-                                    src="https://img.shields.io/badge/built%20for-Python≥3.6-red.svg?style=flat"></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="https://github.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2/pulls">
-                                <img alt="PRsWelcome"
-                                    src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" /></a>
-                        </td>
-                        <td><a href="https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2/pulls">
-                                <img alt="PRsWelcome"
-                                    src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" /></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="https://github.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2/stargazers">
-                                <img alt="GitHub Repo stars"
-                                    src="https://img.shields.io/github/stars/Tkd-Alex/Twitch-Channel-Points-Miner-v2" /></a>
-                        </td>
-                        <td><a href="https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2/stargazers">
-                                <img alt="GitHub Repo stars"
-                                    src="https://img.shields.io/github/stars/rdavydov/Twitch-Channel-Points-Miner-v2" /></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a
-                                href="https://github.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2/issues?q=is%3Aissue+is%3Aclosed">
-                                <img alt="GitHub closed issues"
-                                    src="https://img.shields.io/github/issues-closed/Tkd-Alex/Twitch-Channel-Points-Miner-v2"></a>
-                        </td>
-                        <td><a
-                                href="https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2/issues?q=is%3Aissue+is%3Aclosed">
-                                <img alt="GitHub closed issues"
-                                    src="https://img.shields.io/github/issues-closed/rdavydov/Twitch-Channel-Points-Miner-v2"></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><a href="https://github.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2">
-                                <img alt="GitHub last commit"
-                                    src="https://img.shields.io/github/last-commit/Tkd-Alex/Twitch-Channel-Points-Miner-v2" /></a>
-                        </td>
-                        <td><a href="https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2">
-                                <img alt="GitHub last commit"
-                                    src="https://img.shields.io/github/last-commit/rdavydov/Twitch-Channel-Points-Miner-v2" /></a>
-                        </td>
-                    </tr>
-                </table>
+        </header>
+
+        <!-- Global Stats -->
+        <div class="global-stats" id="global-stats">
+            <div class="stat-card">
+                <div class="stat-value" id="gs-total-points">—</div>
+                <div class="stat-label">Total Points</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="gs-total-gained">—</div>
+                <div class="stat-label">Points Gained</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="gs-streamers">—</div>
+                <div class="stat-label">Streamers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="gs-win-rate">—</div>
+                <div class="stat-label">Win Rate</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="gs-best">—</div>
+                <div class="stat-label">Most Profitable</div>
             </div>
         </div>
 
-        <div class="columns">
-            <div class="column is-narrow has-text-center">
-                <div class="dropdown">
-                    <div class="dropdown-trigger">
-                        <button class="button" aria-haspopup="true" aria-controls="dropdown-menu">
-                            <span id="sorting-by"></span>
-                            <span class="icon is-small">
-                                <i class="fas fa-angle-down" aria-hidden="true"></i>
-                            </span>
-                        </button>
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <div class="sort-dropdown">
+                <button class="sort-dropdown-btn" id="sorting-by">Name ascending <i class="fas fa-angle-down"></i></button>
+                <div class="sort-dropdown-menu" id="sort-menu">
+                    <a href="#" onclick="changeSortBy(this); return false;">Name ascending</a>
+                    <a href="#" onclick="changeSortBy(this); return false;">Name descending</a>
+                    <a href="#" onclick="changeSortBy(this); return false;">Points ascending</a>
+                    <a href="#" onclick="changeSortBy(this); return false;">Points descending</a>
+                    <a href="#" onclick="changeSortBy(this); return false;">Last activity ascending</a>
+                    <a href="#" onclick="changeSortBy(this); return false;">Last activity descending</a>
+                </div>
+            </div>
+            <input type="date" id="startDate">
+            <input type="date" id="endDate">
+            <div style="flex:1"></div>
+            <button class="btn btn-sm" id="auto-update-log" style="display:none;">⏸️</button>
+            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.85rem;">
+                <input type="checkbox" id="log"> Log
+            </label>
+            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.85rem;">
+                <input type="checkbox" checked id="annotations"> Annotations
+            </label>
+            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.85rem;">
+                <input type="checkbox" id="dry-run"> Dry Run
+            </label>
+            <div class="chart-actions">
+                <button class="btn btn-sm" id="export-csv" title="Export CSV"><i class="fas fa-file-csv"></i> CSV</button>
+                <button class="btn btn-sm" id="export-json" title="Export JSON"><i class="fas fa-file-code"></i> JSON</button>
+            </div>
+        </div>
+
+        <!-- Main Grid: Sidebar + Content -->
+        <div class="main-grid">
+            <aside class="sidebar">
+                <div class="sidebar-header">Streamers</div>
+                <ul class="streamer-list" id="streamers-list"></ul>
+            </aside>
+
+            <main>
+                <div class="card chart-container" id="chart"></div>
+
+                <div class="card" id="log-box" style="display:none; padding:0.5rem;">
+                    <pre id="log-content">Set save=True in logger_settings to enable log viewing.&#10;</pre>
+                </div>
+
+                <div class="card" id="dry-run-box" style="display:none; padding:0.75rem;">
+                    <div class="card-title"><i class="fas fa-flask"></i> Strategy Comparison (Dry Run)</div>
+                    <div id="dry-run-summary">
+                        <p class="dry-run-placeholder">Select a streamer to view strategy comparison data.</p>
                     </div>
-                    <div class="dropdown-menu" id="dropdown-menu" role="menu">
-                        <div class="dropdown-content">
-                            <a href="#" class="dropdown-item" onClick="changeSortBy(this)">
-                                Name ascending
-                            </a>
-                            <a href="#" class="dropdown-item" onClick="changeSortBy(this)">
-                                Name descending
-                            </a>
-                            <a href="#" class="dropdown-item" onClick="changeSortBy(this)">
-                                Points ascending
-                            </a>
-                            <a href="#" class="dropdown-item" onClick="changeSortBy(this)">
-                                Points descending
-                            </a>
-                            <a href="#" class="dropdown-item" onClick="changeSortBy(this)">
-                                Last activity ascending
-                            </a>
-                            <a href="#" class="dropdown-item" onClick="changeSortBy(this)">
-                                Last activity descending
-                            </a>
+                    <div id="dry-run-history" style="margin-top:1rem;"></div>
+
+                    <!-- Auto-Adjust Controls -->
+                    <div id="auto-adjust-controls" style="margin-top:1rem; padding:0.75rem; border-top:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; font-size:0.85rem;">
+                            <strong style="color:#9da2b8;"><i class="fas fa-robot"></i> Auto-Adjust:</strong>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                                <input type="checkbox" id="aa-enabled"> Enabled
+                            </label>
+                            <label style="display:flex; align-items:center; gap:4px;">
+                                Threshold: <input type="number" id="aa-threshold" value="3" min="1" max="20" style="width:3rem; padding:2px 4px; background:#1e1e2e; color:#cdd6f4; border:1px solid #45475a; border-radius:4px;">
+                            </label>
+                            <label style="display:flex; align-items:center; gap:4px;">
+                                Min predictions: <input type="number" id="aa-min-preds" value="5" min="1" max="100" style="width:3rem; padding:2px 4px; background:#1e1e2e; color:#cdd6f4; border:1px solid #45475a; border-radius:4px;">
+                            </label>
+                            <button class="btn btn-sm" onclick="saveAutoAdjust()">Save</button>
+                            <span id="aa-status" style="color:#36b535; display:none;"></span>
+                        </div>
+                    </div>
+
+                    <!-- Discord Controls -->
+                    <div style="margin-top:0.75rem; padding:0.75rem; border-top:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; font-size:0.85rem;">
+                            <strong style="color:#9da2b8;"><i class="fab fa-discord"></i> Discord:</strong>
+                            <button class="btn btn-sm" onclick="sendDiscordSummary()" title="Send summary embeds to Discord">📊 Send Summary</button>
+                            <button class="btn btn-sm" onclick="sendChannelLog()" title="Send channel event logbook to Discord">📖 Channel Log</button>
+                            <button class="btn btn-sm" onclick="runDiscordCleanup()" title="Clean up old messages and repost as organized embeds (backs up to DB first)">🧹 Cleanup &amp; Organize</button>
+                        </div>
+                    </div>
+
+                    <!-- DB Export/Import -->
+                    <div style="margin-top:0.75rem; padding:0.75rem; border-top:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; font-size:0.85rem;">
+                            <strong style="color:#9da2b8;"><i class="fas fa-database"></i> Telemetry DB:</strong>
+                            <a class="btn btn-sm" href="./api/telemetry/export/db" title="Download telemetry.db file">💾 Export DB</a>
+                            <a class="btn btn-sm" href="./api/telemetry/export/json" title="Export all data as JSON">📄 Export JSON</a>
+                            <button class="btn btn-sm" onclick="importTelemetryDB()" title="Import a telemetry.db or JSON export">📥 Import</button>
+                            <input type="file" id="db-import-file" accept=".db,.json" style="display:none;" onchange="handleDBImport(this)">
                         </div>
                     </div>
                 </div>
-            </div>
-            <div class="column is-2 has-text-left">
-                <input class="input" type="date" id="startDate">
-            </div>
-            <div class="column is-2 has-text-left">
-                <input class="input" type="date" id="endDate">
-            </div>
-            <div class="column has-text-right" style="margin: auto">
-                <button id="auto-update-log">⏸️</button>
-                <label class="checkbox checkbox-label">
-                    Log
-                    <input type="checkbox" id="log">
-                </label>
-                <label class="checkbox checkbox-label">
-                    Annotations
-                    <input type="checkbox" checked="true" id="annotations">
-                </label>
-                <label class="checkbox checkbox-label">
-                    Dark mode
-                    <input type="checkbox" checked="true" id="dark-mode">
-                </label>
-                <label class="checkbox checkbox-label">
-                    Dry Run
-                    <input type="checkbox" id="dry-run">
-                </label>
-                <label class="checkbox checkbox-label">
-                    Header
-                    <input type="checkbox" checked="true" id="toggle-header">
-                </label>
-                <a href="/config" style="margin-left: 0.5rem; color: #f9826c; text-decoration: none; font-weight: bold;"
-                    title="Edit configuration">
-                    ⚙️ Config
-                </a>
-            </div>
-        </div>
-        <div class="columns">
-            <div class="column is-narrow">
-                <div class="tabs">
-                    <ul id="streamers-list"></ul>
-                </div>
-            </div>
-            <div class="column">
-                <div class="box" id="chart" style="padding: 0.30rem;"></div>
-            </div>
-        </div>
-        <div class="columns">
-            <div class="column is-12">
-                <div class="box" id="log-box" style="padding: 0.30rem; display: none;">
-                    <pre id="log-content">In your run.py file set save=True in logger_settings to save logs to a file.&#10;&#13;</pre>
-                </div>
-            </div>
-        </div>
-        <div class="columns">
-            <div class="column is-12">
-                <div class="box" id="dry-run-box" style="padding: 0.75rem; display: none;">
-                    <h3 class="title is-5" style="margin-bottom: 0.5rem;">
-                        <i class="fas fa-flask"></i> Strategy Comparison (Dry Run)
-                    </h3>
-                    <div id="dry-run-summary">
-                        <p class="has-text-grey">Select a streamer to view strategy comparison data.</p>
-                    </div>
-                    <div id="dry-run-history" style="margin-top: 1rem;"></div>
-                </div>
-            </div>
+            </main>
         </div>
     </div>
 </body>
 
 <script type="text/javascript">
-    // n.b. Seems that we are unable to call Flask variable in JS code imported from JS file.
-    // That's why "link[href='{{url_for('static', filename='dark-theme.css')}}']", {{ refresh }}, {{ daysAgo }} are here.
-
+    // Flask template variables must be injected here (can't access in external JS)
     function toggleDarkMode() {
-        var darkMode = $('#dark-mode').prop("checked")
+        var darkMode = $('#dark-mode').prop("checked");
         $("link[href='{{url_for('static', filename='dark-theme.css')}}']").prop("disabled", !darkMode);
         chart.updateOptions({
-            colors: darkMode === true ? ["#f9826c"] : ['#008ffb'],
-            chart: {
-                foreColor: darkMode === true ? "#fff" : '#373d3f'
-            },
-            tooltip: {
-                theme: darkMode === true ? "dark" : "light"
-            }
-        })
+            colors: darkMode ? ["#f9826c"] : ['#008ffb'],
+            chart: { foreColor: darkMode ? "#e0e0e0" : '#373d3f' },
+            tooltip: { theme: darkMode ? "dark" : "light" }
+        });
     }
     var refresh = parseInt("{{ refresh }}");
     var daysAgo = parseInt("{{ daysAgo }}");
