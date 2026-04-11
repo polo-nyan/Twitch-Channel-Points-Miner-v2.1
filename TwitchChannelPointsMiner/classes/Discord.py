@@ -473,6 +473,107 @@ class Discord(object):
             logger.warning("Failed to POST logbook embed", exc_info=True)
         return None
 
+    def purge_all_messages(self, limit: int = 500) -> int:
+        """Delete ALL messages from the Discord channel (bot-token mode) or from
+        this webhook (webhook mode, using stored logbook IDs only since Discord
+        does not expose a list endpoint for webhooks).
+
+        Returns the count of successfully deleted messages.
+        """
+        deleted = 0
+
+        if self.bot_token and self.channel_id:
+            headers = {"Authorization": f"Bot {self.bot_token}", "Content-Type": "application/json"}
+            channel_url = f"https://discord.com/api/v10/channels/{self.channel_id}/messages"
+
+            # 1. Collect all message IDs
+            all_ids: list[str] = []
+            before = None
+            while len(all_ids) < limit:
+                params: dict = {"limit": min(100, limit - len(all_ids))}
+                if before:
+                    params["before"] = before
+                self._rate_limiter.acquire()
+                try:
+                    resp = requests.get(channel_url, headers=headers, params=params, timeout=15)
+                    if resp.status_code == 429:
+                        self._rate_limiter.report_rate_limited()
+                        continue
+                    self._rate_limiter.report_success()
+                    if resp.status_code != 200:
+                        break
+                    batch = resp.json()
+                    if not isinstance(batch, list) or not batch:
+                        break
+                    all_ids.extend(str(m["id"]) for m in batch if "id" in m)
+                    before = batch[-1]["id"]
+                    if len(batch) < 100:
+                        break
+                except requests.RequestException:
+                    logger.warning("purge_all_messages: failed to fetch page", exc_info=True)
+                    break
+
+            # 2. Split by age: messages < 14 days old → bulk-delete; older → individual
+            from datetime import timedelta
+            now = datetime.now(timezone.utc)
+            cutoff = now - timedelta(days=13, hours=23)
+
+            bulk_ids: list[str] = []
+            old_ids: list[str] = []
+            for mid in all_ids:
+                try:
+                    ts_ms = (int(mid) >> 22) + 1420070400000  # Discord snowflake epoch
+                    msg_dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+                    if msg_dt > cutoff:
+                        bulk_ids.append(mid)
+                    else:
+                        old_ids.append(mid)
+                except (ValueError, OverflowError):
+                    old_ids.append(mid)
+
+            # Bulk-delete in chunks of up to 100
+            bulk_url = f"https://discord.com/api/v10/channels/{self.channel_id}/messages/bulk-delete"
+            for i in range(0, len(bulk_ids), 100):
+                chunk = bulk_ids[i:i + 100]
+                if len(chunk) < 2:
+                    old_ids.extend(chunk)
+                    continue
+                self._rate_limiter.acquire()
+                try:
+                    resp = requests.post(bulk_url, headers=headers, json={"messages": chunk}, timeout=15)
+                    if resp.status_code == 204:
+                        deleted += len(chunk)
+                        self._rate_limiter.report_success()
+                    elif resp.status_code == 429:
+                        self._rate_limiter.report_rate_limited()
+                    else:
+                        old_ids.extend(chunk)  # Fall back to individual delete
+                except requests.RequestException:
+                    old_ids.extend(chunk)
+
+            # Individual delete for old messages
+            for mid in old_ids:
+                self._rate_limiter.acquire()
+                try:
+                    resp = requests.delete(f"{channel_url}/{mid}", headers=headers, timeout=10)
+                    if resp.status_code == 204:
+                        deleted += 1
+                        self._rate_limiter.report_success()
+                    elif resp.status_code == 429:
+                        self._rate_limiter.report_rate_limited()
+                except requests.RequestException:
+                    pass
+
+        elif self.webhook_api:
+            # Webhook-only mode: can only delete messages sent by this webhook
+            # that we have stored IDs for (e.g. from logbook_state.json)
+            logger.warning(
+                "purge_all_messages: webhook-only mode — cannot list channel history. "
+                "Configure bot_token + channel_id for full purge support."
+            )
+
+        return deleted
+
     def cleanup_and_repost(self, old_messages: list[dict]) -> int:
         """Delete old plain-text messages and re-post them as embeds.
         Returns count of successfully migrated messages."""

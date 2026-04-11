@@ -1813,10 +1813,43 @@ def discord_cleanup():
     try:
         limit = request.args.get("limit", 100, type=int)
         do_cleanup = request.args.get("cleanup", "false").lower() == "true"
+        purge_mode = request.args.get("purge", "false").lower() == "true"
+        rebuild = request.args.get("rebuild", "true").lower() == "true"
         streamer_filter = request.args.get("streamer", "").lower()
         event_filter = request.args.get("type", "")  # comma-separated
 
         event_types = set(event_filter.split(",")) if event_filter else set()
+
+        if purge_mode:
+            global _telemetry
+            if _telemetry is None:
+                _telemetry = Telemetry()
+            deleted = discord.purge_all_messages(limit=min(limit, 500))
+
+            # Invalidate stored logbook message IDs — the messages are gone
+            state_path = os.path.join(Settings.analytics_path, "logbook_state.json")
+            if os.path.isfile(state_path):
+                os.remove(state_path)
+
+            sent = 0
+            names = []
+            if rebuild:
+                streamers = _telemetry.get_all_streamers()
+                for sname in streamers:
+                    try:
+                        payload, _ = _build_logbook_payload(sname, _telemetry, limit=50)
+                        msg_id = discord.upsert_logbook_embed(sname, payload, state_path)
+                        if msg_id:
+                            sent += 1
+                            names.append(sname)
+                    except Exception:
+                        logger.warning("purge rebuild: failed for %s", sname, exc_info=True)
+
+            return Response(
+                json.dumps({"purged": deleted, "logbooks_sent": sent, "streamers": names}),
+                status=200,
+                mimetype="application/json",
+            )
 
         old_messages = discord.fetch_old_messages(limit=min(limit, 500))
         if not old_messages:
@@ -1953,44 +1986,19 @@ def discord_cleanup():
             mimetype="application/json",
         )
 
-def discord_channel_log():
-    """Send or update a single persistent logbook embed per channel to Discord.
+def _build_logbook_payload(streamer: str, telemetry, limit: int = 50):
+    """Build the Discord logbook embed payload for *streamer*.
 
-    Each channel gets ONE Discord message that is edited in-place on every call
-    so the feed stays clean.  Message IDs are stored in
-    ``<analytics_path>/logbook_state.json``.
+    Returns ``(payload_dict, total_events_count)`` so callers need not
+    duplicate the embed-formatting logic.
     """
-    discord = _get_discord()
-    if discord is None:
-        return Response(
-            json.dumps({"error": "Discord is not configured."}),
-            status=400,
-            mimetype="application/json",
-        )
-
-    global _telemetry
-    if _telemetry is None:
-        _telemetry = Telemetry()
-
-    streamer = request.args.get("streamer", "").strip()
-    limit = request.args.get("limit", 50, type=int)
-    limit = min(limit, 200)
-
-    if not streamer:
-        return Response(
-            json.dumps({"error": "Missing 'streamer' parameter."}),
-            status=400,
-            mimetype="application/json",
-        )
-
     from TwitchChannelPointsMiner.classes.Discord import EVENT_ICONS
 
-    entries = _telemetry.get_channel_log(streamer, limit=limit)
+    entries = telemetry.get_channel_log(streamer, limit=limit)
 
-    # ── Build a compact single-embed log ─────────────────────────────────────
     wins = losses = 0
     net_pts = 0
-    lines: list[str] = []
+    lines = []
 
     for entry in entries[:25]:
         etype = entry.get("event_type", "")
@@ -2046,7 +2054,6 @@ def discord_channel_log():
     elif len(entries) > 25:
         lines.append(f"*…{len(entries) - 25} older events not shown*")
 
-    # ── Footer stats ─────────────────────────────────────────────────────────
     total = wins + losses
     win_rate = f"{100 * wins / total:.1f}%" if total > 0 else "N/A"
     net_str = f"+{net_pts:,}" if net_pts >= 0 else f"{net_pts:,}"
@@ -2055,7 +2062,7 @@ def discord_channel_log():
     embed = {
         "title": f"📖 {streamer} — Event Logbook",
         "description": "\n".join(lines),
-        "color": 0x9146FF,  # Twitch purple
+        "color": 0x9146FF,
         "footer": {
             "text": (
                 f"📊 {wins}W / {losses}L  ({win_rate})  |  "
@@ -2063,13 +2070,46 @@ def discord_channel_log():
             )
         },
     }
-
-    state_path = os.path.join(Settings.analytics_path, "logbook_state.json")
     payload = {
         "username": "Twitch Channel Points Miner",
         "avatar_url": AVATAR_URL,
         "embeds": [embed],
     }
+    return payload, len(entries)
+
+
+def discord_channel_log():
+    """Send or update a single persistent logbook embed per channel to Discord.
+
+    Each channel gets ONE Discord message that is edited in-place on every call
+    so the feed stays clean.  Message IDs are stored in
+    ``<analytics_path>/logbook_state.json``.
+    """
+    discord = _get_discord()
+    if discord is None:
+        return Response(
+            json.dumps({"error": "Discord is not configured."}),
+            status=400,
+            mimetype="application/json",
+        )
+
+    global _telemetry
+    if _telemetry is None:
+        _telemetry = Telemetry()
+
+    streamer = request.args.get("streamer", "").strip()
+    limit = request.args.get("limit", 50, type=int)
+    limit = min(limit, 200)
+
+    if not streamer:
+        return Response(
+            json.dumps({"error": "Missing 'streamer' parameter."}),
+            status=400,
+            mimetype="application/json",
+        )
+
+    state_path = os.path.join(Settings.analytics_path, "logbook_state.json")
+    payload, total_events = _build_logbook_payload(streamer, _telemetry, limit=limit)
 
     msg_id = discord.upsert_logbook_embed(streamer, payload, state_path)
     action = "updated" if (msg_id and os.path.isfile(state_path)) else "created"
@@ -2081,7 +2121,7 @@ def discord_channel_log():
                     "sent": 1,
                     "action": action,
                     "message_id": msg_id,
-                    "total_events": len(entries),
+                    "total_events": total_events,
                 }
             ),
             status=200,

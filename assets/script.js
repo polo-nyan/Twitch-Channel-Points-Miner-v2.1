@@ -546,6 +546,25 @@ function runDiscordCleanup() {
     });
 }
 
+function runDiscordPurge() {
+    if (!confirm('🔥 PURGE & REBUILD\n\nThis will:\n1. DELETE ALL messages in the Discord channel\n2. Rebuild ONE logbook embed per streamer\n\nRequires bot_token + channel_id for full purge.\nWebhook-only: only stored logbook messages will be cleared.\n\nContinue?')) return;
+    $.ajax({
+        url: './api/discord/cleanup?purge=true&rebuild=true&limit=500',
+        method: 'POST',
+        success: function (resp) {
+            var purged = resp.purged || 0;
+            var sent = resp.logbooks_sent || 0;
+            var streamers = (resp.streamers || []).join(', ') || 'none';
+            alert('Purge complete!\n\nDeleted: ' + purged + ' messages\nLogbooks rebuilt: ' + sent + '\nStreamers: ' + streamers);
+        },
+        error: function (xhr) {
+            var err = 'Purge failed';
+            try { err = JSON.parse(xhr.responseText).error || err; } catch(e) {}
+            alert(err);
+        }
+    });
+}
+
 function importTelemetryDB() {
     $('#db-import-file').click();
 }
@@ -616,7 +635,7 @@ function renderDryRunSummary(summary, currentStrategy, streamerName) {
         else if (isCurrent) rowClass = 'dry-run-active';
 
         var statusBadges = '';
-        if (isCurrent) statusBadges += '<span class="tag-warning">ACTIVE</span> ';
+        if (isCurrent) statusBadges += '<span class="tag-warning">▶ CURRENT</span> ';
         if (s.is_best) statusBadges += '<span class="tag-success">BEST</span> ';
 
         // Show switch button for non-active strategies

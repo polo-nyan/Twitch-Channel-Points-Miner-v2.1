@@ -963,6 +963,20 @@ class Telemetry:
         finally:
             conn.close()
 
+    def get_all_streamers(self) -> list:
+        """Return every distinct streamer name recorded in the telemetry DB."""
+        conn = self._get_conn()
+        try:
+            rows = conn.execute(
+                "SELECT DISTINCT streamer FROM events WHERE streamer IS NOT NULL "
+                "UNION "
+                "SELECT DISTINCT streamer FROM predictions WHERE streamer IS NOT NULL "
+                "ORDER BY streamer"
+            ).fetchall()
+            return [row[0] for row in rows]
+        finally:
+            conn.close()
+
     def export_all_tables(self):
         """Export all telemetry data as a JSON-serializable dict."""
         conn = self._get_conn()
