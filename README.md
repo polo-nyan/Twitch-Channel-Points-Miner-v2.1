@@ -57,6 +57,10 @@ Read more about the channel points [here](https://help.twitch.tv/s/article/chann
     - [FilterCondition](#filtercondition)
         - [Example](#example)
 7. 📈 [Analytics](#analytics)
+    - [Strategy Advisor (Dry-Run Comparison)](#strategy-advisor-dry-run-comparison)
+    - [Web Config Editor](#web-config-editor)
+    - [Discord Logbook](#discord-logbook)
+    - [Telemetry & Backup](#telemetry--backup)
 8. 🍪 [Migrating from an old repository (the original one)](#migrating-from-an-old-repository-the-original-one)
 9. 🪟 [Windows](#windows)
 10. 📱 [Termux](#termux)
@@ -72,11 +76,18 @@ If you have any issues or you want to contribute, you are welcome! Please open a
 
 This fork adds significant new features on top of the upstream v2:
 
-- 🔮 **Dry-Run Strategy Comparison** — Shadow-evaluates all available strategies on every prediction event, scores them after resolution, and shows results in the web UI ✔️
-- 📊 **HISTORICAL Strategy** — New prediction strategy that weighs historical outcome win rates (60%) with current odds (40%) ✔️
+- 🔮 **Dry-Run Strategy Comparison** — Shadow-evaluates all available strategies on every prediction, scores them after resolution, and shows a ranked comparison table in the web dashboard ✔️
+- 📊 **HISTORICAL Strategy** — Weighs historical outcome win rates (60%) with current odds (40%). Falls back to SMART when no history is available. Requires `enable_analytics=True` ✔️
+- 🗄️ **SQLite Telemetry** — All predictions, points events, and session data are persisted in `analytics/telemetry.db` with full historical recall ✔️
+- 🎯 **Per-Channel Strategy Switching** — Click any strategy in the dry-run table to switch a specific channel to that strategy at runtime without restarting ✔️
+- 🤖 **Auto-Adjust Strategy** — Automatically switches a channel to the best-performing strategy if it falls below a configurable win-rate threshold ✔️
+- 📖 **Discord Logbook** — Sends one persistent embed per channel to Discord; subsequent calls *edit* that same message so your feed stays clean instead of flooding with individual events ✔️
 - 💬 **Discord Rich Embeds** — Upgraded from plain text to rich embeds with event-specific colors, icons, timestamps, and streamer info ✔️
 - 🔇 **Discord Mute System** — Mute notifications per-channel, per-event, or globally (e.g., silence all `GAIN_FOR_WATCH` or mute a specific streamer) ✔️
-- ⚙️ **Web Config Editor** — Edit your `run.py` config directly in the browser with syntax validation, save with backup, and revert ✔️
+- ⚙️ **Web Config Editor** — Edit your `settings.json` config directly in the browser with visual form fields, syntax validation, save with backup, and revert ✔️
+- 🌙 **Dark Mode Analytics** — Toggle dark/light theme in the analytics dashboard ✔️
+- 💾 **Telemetry Export/Import** — Export the SQLite database or a full JSON dump from the dashboard; re-import for backup/restore ✔️
+- 🔄 **Config Hot-Reload** — The miner watches `settings.json` for changes and applies them without restarting ✔️
 - 🤖 **AI Notice** — Transparency about AI-assisted development ✔️
 
 ## Original v2 Features
@@ -361,17 +372,19 @@ Start mining! `python run.py` 🥳
 #### Docker Hub
 Official Docker images are on https://hub.docker.com/r/rdavidoff/twitch-channel-points-miner-v2 for `linux/amd64`, `linux/arm64` and `linux/arm/v7`.
 
-The following file is mounted :
+> **v2.1 note**: this fork uses `settings.json` for configuration (editable live via the web Config Editor) instead of `run.py`. Mount `settings.json` as a volume alongside the data folders.
 
-- run.py : this is your starter script with your configuration
+The following file is mounted:
 
-These folders are mounted :
+- `settings.json` — your configuration file (hot-reloaded on change)
 
-- analytics : to save the analytics data
-- cookies : to provide login information
-- logs : to keep logs outside of container
+These folders are mounted:
 
-**Example using docker-compose:**
+- `analytics` — SQLite telemetry database, JSON exports, and logbook state
+- `cookies` — login session cookies
+- `logs` — log files
+
+**Example using docker-compose (v2.1):**
 
 ```yml
 version: "3.9"
@@ -387,9 +400,9 @@ services:
       - ./analytics:/usr/src/app/analytics
       - ./cookies:/usr/src/app/cookies
       - ./logs:/usr/src/app/logs
-      - ./run.py:/usr/src/app/run.py:ro
+      - ./settings.json:/usr/src/app/settings.json
     ports:
-      - "5000:5000"
+      - "5005:5005"
 ```
 
 **Example with docker run:**
@@ -398,8 +411,8 @@ docker run \
     -v $(pwd)/analytics:/usr/src/app/analytics \
     -v $(pwd)/cookies:/usr/src/app/cookies \
     -v $(pwd)/logs:/usr/src/app/logs \
-    -v $(pwd)/run.py:/usr/src/app/run.py:ro \
-    -p 5000:5000 \
+    -v $(pwd)/settings.json:/usr/src/app/settings.json \
+    -p 5005:5005 \
     rdavidoff/twitch-channel-points-miner-v2
 ```
 
@@ -668,17 +681,34 @@ Here's a concrete example. Let's suppose we have a bet that is opened with a tim
 - **PERCENTAGE** with `delay=0.2`: The bet will be placed when the timer went down by 20% (so 2mins after the bet is opened)
 
 ## Analytics
-We have recently introduced a little frontend where you can show with a chart you points trend. The script will spawn a Flask web-server on your machine where you can select binding address and port.
-The chart provides some annotation to handle the prediction and watch strike events. Usually annotation are used to notice big increase / decrease of points. If you want to can disable annotations.
-On each (x, y) points Its present a tooltip that show points, date time and reason of points gained / lost. This web page was just a funny idea, and it is not intended to use for a professional usage.
-If you want you can toggle the dark theme with the dedicated checkbox.
+The analytics web-server provides an interactive chart of your points trend with full annotation support for predictions and watch-streak events. Hover any data point for a tooltip showing points, datetime, and reason.
 
 | Light theme | Dark theme |
 | ----------- | ---------- |
-| ![Light theme](https://raw.githubusercontent.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2/master/assets/chart-analytics-light.png) | ![Dark theme](https://raw.githubusercontent.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2/master/assets/chart-analytics-dark.png) |
+| ![Light theme](assets/chart-analytics-light.png) | ![Dark theme](assets/chart-analytics-dark.png) |
+
+### Strategy Advisor (Dry-Run Comparison)
+
+Enable dry-run mode in the dashboard to see a ranked comparison of all strategies evaluated on your actual prediction history. Click any strategy row to switch that channel live. The **Auto-Adjust** panel at the bottom automatically switches to the best strategy when win rate drops below your threshold.
+
+![Strategy Advisor](assets/strategy-advisor-dark.png)
+
+### Web Config Editor
+
+Edit `settings.json` directly in the browser without touching files. Supports visual form fields, drag-to-reorder priority chips, validation, hot-save (applied without restart), and Export to legacy `run.py` format.
+
+![Config Editor](assets/config-editor.png)
+
+### Discord Logbook
+
+The **📖 Channel Log** button sends one persistent Discord embed per channel. Every subsequent click *edits* that same message — keeping your Discord feed clean. The embed shows the last 25 events with timestamps, win/loss icons, strategy tags, and a running net-points/win-rate footer.
+
+### Telemetry & Backup
+
+All data is stored in `analytics/telemetry.db` (SQLite). The **Export DB** and **Export JSON** buttons let you download a full backup at any time. **Import** restores from a previous JSON dump.
 
 For use this feature just call the `analytics()` method before start mining. Read more at: [#96](https://github.com/Tkd-Alex/Twitch-Channel-Points-Miner-v2/issues/96)
-The chart will be autofreshed each `refresh` minutes. If you want to connect from one to second machine that have that webpanel you have to use `0.0.0.0` instead of `127.0.0.1`. With the `days_ago` arg you can select how many days you want to show by default in your analytics graph.
+The chart will be auto-refreshed each `refresh` minutes. If you want to connect from one to second machine that have that webpanel you have to use `0.0.0.0` instead of `127.0.0.1`. With the `days_ago` arg you can select how many days you want to show by default in your analytics graph.
 ```python
 from TwitchChannelPointsMiner import TwitchChannelPointsMiner
 twitch_miner = TwitchChannelPointsMiner("your-twitch-username")
@@ -686,11 +716,11 @@ twitch_miner.analytics(host="127.0.0.1", port=5000, refresh=5, days_ago=7)   # A
 twitch_miner.mine(followers=True, blacklist=["user1", "user2"])
 ```
 
-### `enable_analytics` option in `twitch_minerfile` toggles Analytics needed for the `analytics()` method
+### `enable_analytics` option in `TwitchChannelPointsMiner` toggles Analytics
 
-Disabling Analytics significantly reduces memory consumption and saves some disk space by not creating and writing `/analytics/*.json`.
+Disabling Analytics significantly reduces memory consumption and saves some disk space.
 
-Set this option to `True` if you need Analytics. Otherwise set this option to `False` (default value).
+Set `enable_analytics=True` if you need the analytics dashboard, HISTORICAL strategy, or dry-run comparison. Otherwise set it to `False` (default).
 
 ## Migrating from an old repository (the original one):
 If you already have a `twitch-cookies.pkl` and you don't want to log in again, please create a `cookies/` folder in the current directory and then copy the .pkl file with a new name `your-twitch-username.pkl`

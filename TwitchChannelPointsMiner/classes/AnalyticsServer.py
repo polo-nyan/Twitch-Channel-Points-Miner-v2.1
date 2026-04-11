@@ -1954,8 +1954,12 @@ def discord_cleanup():
         )
 
 def discord_channel_log():
-    """Send a logbook-style event log for a specific channel to Discord.
-    Compiles chronological events from telemetry into organized embeds."""
+    """Send or update a single persistent logbook embed per channel to Discord.
+
+    Each channel gets ONE Discord message that is edited in-place on every call
+    so the feed stays clean.  Message IDs are stored in
+    ``<analytics_path>/logbook_state.json``.
+    """
     discord = _get_discord()
     if discord is None:
         return Response(
@@ -1979,118 +1983,113 @@ def discord_channel_log():
             mimetype="application/json",
         )
 
-    from TwitchChannelPointsMiner.classes.Discord import EVENT_ICONS, EVENT_COLORS
+    from TwitchChannelPointsMiner.classes.Discord import EVENT_ICONS
 
     entries = _telemetry.get_channel_log(streamer, limit=limit)
-    if not entries:
-        return Response(
-            json.dumps({"sent": 0, "message": "No events found."}),
-            status=200,
-            mimetype="application/json",
-        )
 
-    # Group entries by date for logbook pages
-    pages = {}
-    for entry in entries:
+    # ── Build a compact single-embed log ─────────────────────────────────────
+    wins = losses = 0
+    net_pts = 0
+    lines: list[str] = []
+
+    for entry in entries[:25]:
+        etype = entry.get("event_type", "")
+        icon = EVENT_ICONS.get(etype, "📌")
         ts = entry.get("timestamp", "")
-        date_str = ts[:10] if len(ts) >= 10 else "Unknown"
-        if date_str not in pages:
-            pages[date_str] = []
-        pages[date_str].append(entry)
+        time_str = ts[11:16] if len(ts) >= 16 else (ts[:10] if ts else "?")
+        data = entry.get("data") or {}
 
-    sent = 0
-    # Send a header embed
-    header_desc = (
-        f"📖 **Channel Event Log — {streamer}**\n"
-        f"Showing {len(entries)} most recent events across {len(pages)} day(s)."
-    )
-    header_embed = discord._build_embed(header_desc, "BET_GENERAL", streamer)
-    header_embed["title"] = f"📖 {streamer} — Event Logbook"
+        if entry["category"] == "prediction":
+            result = (data.get("result") or "").upper()
+            pts = int(data.get("points_gained") or 0)
+            if result == "WIN":
+                wins += 1
+                result_icon = "✅"
+            elif result == "LOSE":
+                losses += 1
+                result_icon = "❌"
+            else:
+                result_icon = "🔄"
+            net_pts += pts
+            pts_str = f"+{pts:,}" if pts >= 0 else f"{pts:,}"
+            title_short = (data.get("title") or "Prediction")[:32]
+            strategy = data.get("strategy") or ""
+            strat_tag = f" `{strategy}`" if strategy else ""
+            line = (
+                f"`{time_str}` {result_icon} {title_short}"
+                f" ({pts_str}pts){strat_tag}"
+            )
+        elif entry["category"] == "points":
+            amt = int(data.get("amount") or 0)
+            reason = (data.get("reason") or "bonus")[:24]
+            line = f"`{time_str}` {icon} +{amt:,}pts — {reason}"
+        else:
+            if etype in ("streamer_online", "STREAMER_ONLINE"):
+                line = f"`{time_str}` 🟢 Stream **Online**"
+            elif etype in ("streamer_offline", "STREAMER_OFFLINE"):
+                line = f"`{time_str}` 🔴 Stream **Offline**"
+            elif etype in ("raid", "JOIN_RAID"):
+                to = data.get("to_streamer", "?") if isinstance(data, dict) else "?"
+                line = f"`{time_str}` 📡 Raid → **{to}**"
+            elif etype in ("bonus_claim", "BONUS_CLAIM"):
+                line = f"`{time_str}` 🎁 Bonus claimed"
+            elif etype in ("watch_streak", "WATCH_STREAK"):
+                pts = int(data.get("points") or 0)
+                line = f"`{time_str}` 🔥 Watch streak +{pts:,}pts"
+            else:
+                line = f"`{time_str}` {icon} {etype}"
+
+        lines.append(line)
+
+    if not lines:
+        lines = ["*No events recorded yet.*"]
+    elif len(entries) > 25:
+        lines.append(f"*…{len(entries) - 25} older events not shown*")
+
+    # ── Footer stats ─────────────────────────────────────────────────────────
+    total = wins + losses
+    win_rate = f"{100 * wins / total:.1f}%" if total > 0 else "N/A"
+    net_str = f"+{net_pts:,}" if net_pts >= 0 else f"{net_pts:,}"
+    now_str = datetime.utcnow().strftime("%d %b %H:%M UTC")
+
+    embed = {
+        "title": f"📖 {streamer} — Event Logbook",
+        "description": "\n".join(lines),
+        "color": 0x9146FF,  # Twitch purple
+        "footer": {
+            "text": (
+                f"📊 {wins}W / {losses}L  ({win_rate})  |  "
+                f"Net: {net_str}pts  |  Updated: {now_str}"
+            )
+        },
+    }
+
+    state_path = os.path.join(Settings.analytics_path, "logbook_state.json")
     payload = {
         "username": "Twitch Channel Points Miner",
         "avatar_url": AVATAR_URL,
-        "embeds": [header_embed],
+        "embeds": [embed],
     }
-    try:
-        discord._rate_limiter.acquire()
-        resp = requests.post(discord.webhook_api, json=payload, timeout=10)
-        if resp.status_code in (200, 204):
-            discord._rate_limiter.report_success()
-            sent += 1
-        elif resp.status_code == 429:
-            discord._rate_limiter.report_rate_limited()
-    except Exception:
-        logger.warning("Failed to send logbook header", exc_info=True)
 
-    # Send one embed per day (max 10 days to avoid spam)
-    for date_str in sorted(pages.keys(), reverse=True)[:10]:
-        day_entries = pages[date_str]
-        lines = []
-        for entry in day_entries[:25]:  # max 25 entries per day embed
-            etype = entry.get("event_type", "")
-            icon = EVENT_ICONS.get(etype, "📌")
-            ts = entry.get("timestamp", "")
-            time_str = ts[11:16] if len(ts) >= 16 else ""
-            data = entry.get("data") or {}
+    msg_id = discord.upsert_logbook_embed(streamer, payload, state_path)
+    action = "updated" if (msg_id and os.path.isfile(state_path)) else "created"
 
-            if entry["category"] == "prediction":
-                result_icon = "✅" if data.get("result") == "WIN" else (
-                    "❌" if data.get("result") == "LOSE" else "🔄"
-                )
-                pts = data.get("points_gained", 0)
-                prefix = "+" if pts >= 0 else ""
-                line = (
-                    f"`{time_str}` {result_icon} **{data.get('title', 'Prediction')}**"
-                    f" → {data.get('choice', '?')} ({prefix}{pts:,}pts)"
-                )
-                if data.get("strategy"):
-                    line += f" [{data['strategy']}]"
-            elif entry["category"] == "points":
-                amt = data.get("amount", 0)
-                line = f"`{time_str}` {icon} +{amt} pts — {data.get('reason', 'unknown')}"
-            else:
-                # Generic event
-                if etype in ("streamer_online", "STREAMER_ONLINE"):
-                    line = f"`{time_str}` {icon} Stream went **Online**"
-                elif etype in ("streamer_offline", "STREAMER_OFFLINE"):
-                    line = f"`{time_str}` {icon} Stream went **Offline**"
-                elif etype in ("raid", "JOIN_RAID"):
-                    to = data.get("to_streamer", "?") if isinstance(data, dict) else "?"
-                    line = f"`{time_str}` {icon} Joined raid to **{to}**"
-                elif etype in ("bonus_claim", "BONUS_CLAIM"):
-                    line = f"`{time_str}` {icon} Bonus claimed"
-                else:
-                    line = f"`{time_str}` {icon} {etype}"
-
-            lines.append(line)
-
-        if len(day_entries) > 25:
-            lines.append(f"*...and {len(day_entries) - 25} more*")
-
-        desc = "\n".join(lines)
-        color_key = "BET_GENERAL"
-        embed = discord._build_embed(desc, color_key, streamer)
-        embed["title"] = f"📅 {date_str} — {len(day_entries)} event(s)"
-
-        payload = {
-            "username": "Twitch Channel Points Miner",
-            "avatar_url": AVATAR_URL,
-            "embeds": [embed],
-        }
-        try:
-            discord._rate_limiter.acquire()
-            resp = requests.post(discord.webhook_api, json=payload, timeout=10)
-            if resp.status_code in (200, 204):
-                discord._rate_limiter.report_success()
-                sent += 1
-            elif resp.status_code == 429:
-                discord._rate_limiter.report_rate_limited()
-        except Exception:
-            logger.warning("Failed to send logbook page for %s", date_str, exc_info=True)
-
+    if msg_id:
+        return Response(
+            json.dumps(
+                {
+                    "sent": 1,
+                    "action": action,
+                    "message_id": msg_id,
+                    "total_events": len(entries),
+                }
+            ),
+            status=200,
+            mimetype="application/json",
+        )
     return Response(
-        json.dumps({"sent": sent, "days": len(pages), "total_events": len(entries)}),
-        status=200,
+        json.dumps({"error": "Failed to send or update logbook embed."}),
+        status=500,
         mimetype="application/json",
     )
 
