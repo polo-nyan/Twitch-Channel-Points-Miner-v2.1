@@ -85,9 +85,8 @@ def filter_datas(start_date, end_date, datas):
         else datetime.now()
     ).replace(hour=23, minute=59, second=59).timestamp() * 1000
 
-    original_series = datas["series"]
-
     if "series" in datas:
+        original_series = datas["series"]
         df = pd.DataFrame(datas["series"])
         df["datetime"] = pd.to_datetime(df.x // 1000, unit="s")
 
@@ -99,11 +98,12 @@ def filter_datas(start_date, end_date, datas):
             .to_dict("records")
         )
     else:
+        original_series = []
         datas["series"] = []
 
     # If no data is found within the timeframe, that usually means the streamer hasn't streamed within that timeframe
     # We create a series that shows up as a straight line on the dashboard, with 'No Stream' as labels
-    if len(datas["series"]) == 0:
+    if len(datas["series"]) == 0 and original_series:
         new_end_date = start_date
         new_start_date = 0
         df = pd.DataFrame(original_series)

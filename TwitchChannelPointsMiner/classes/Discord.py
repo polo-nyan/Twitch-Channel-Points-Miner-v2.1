@@ -163,6 +163,7 @@ class Discord(object):
         "_rate_limiter",
         "bot_token",
         "channel_id",
+        "_session_cache",
     ]
 
     def __init__(
@@ -190,6 +191,9 @@ class Discord(object):
         self._rate_limiter = RateLimiter(min_interval=0.5, max_retries=5, backoff_max=30.0)
         self.bot_token = bot_token
         self.channel_id = channel_id
+        # Per-channel in-memory event lines for session digest embed
+        # {"channelname": ["HH:MM icon line", ...]}
+        self._session_cache: dict = {}
 
     def is_muted(self, event: Events, channel: str = None) -> bool:
         event_str = str(event)
@@ -230,6 +234,51 @@ class Discord(object):
 
         return embed
 
+    def _format_session_line(self, event_str: str, message: str) -> str:
+        """Format one event as a compact timestamped log line."""
+        icon = EVENT_ICONS.get(event_str, "\U0001f4cb")
+        now = datetime.now().strftime("%H:%M")
+        first = next(
+            (ln.strip() for ln in message.strip().splitlines() if ln.strip()),
+            event_str.replace("_", " ").title(),
+        )
+        if len(first) > 72:
+            first = first[:70] + "\u2026"
+        return f"`{now}` {icon} {first}"
+
+    def _build_session_payload(self, channel: str, latest_event_str: str) -> dict:
+        """Build a Discord embed payload showing the current session's events."""
+        chan_key = (channel or "_global").lower()
+        lines = self._session_cache.get(chan_key, [])
+        color = EVENT_COLORS.get(latest_event_str, 0x7289DA)
+        description = "\n".join(lines) if lines else "*Session starting\u2026*"
+        now_str = datetime.utcnow().strftime("%d %b %H:%M UTC")
+        embed = {
+            "title": f"\U0001f4fa {channel or 'Twitch'} \u2014 Live Activity",
+            "description": description,
+            "color": color,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "footer": {"text": f"\U0001f504 Updated {now_str}", "icon_url": AVATAR_URL},
+        }
+        if channel:
+            embed["author"] = {
+                "name": channel,
+                "url": f"https://twitch.tv/{channel}",
+            }
+        return {
+            "username": "Twitch Channel Points Miner",
+            "avatar_url": AVATAR_URL,
+            "embeds": [embed],
+        }
+
+    def _get_session_state_path(self) -> str | None:
+        """Return path to session_state.json or None if analytics path is unavailable."""
+        try:
+            from TwitchChannelPointsMiner.classes.Settings import Settings
+            return os.path.join(Settings.analytics_path, "session_state.json")
+        except Exception:
+            return None
+
     def send(self, message: str, event: Events, channel: str = None) -> None:
         if str(event) not in self.events:
             return
@@ -237,27 +286,37 @@ class Discord(object):
             return
 
         event_str = str(event)
-        embed = self._build_embed(message, event_str, channel)
+        chan_key = (channel or "_global").lower()
+        state_path = self._get_session_state_path()
 
-        payload = {
-            "username": "Twitch Channel Points Miner",
-            "avatar_url": AVATAR_URL,
-            "embeds": [embed],
-        }
+        # STREAMER_ONLINE: start a fresh session — clear cache and abandon old message
+        if event_str == "STREAMER_ONLINE":
+            self._session_cache[chan_key] = []
+            if state_path and os.path.isfile(state_path):
+                try:
+                    with open(state_path, "r", encoding="utf-8") as _fh:
+                        _st = json.load(_fh)
+                    if chan_key in _st:
+                        _st.pop(chan_key)
+                        with open(state_path, "w", encoding="utf-8") as _fh:
+                            json.dump(_st, _fh, indent=2)
+                except Exception:
+                    pass
 
-        self._rate_limiter.acquire()
+        # Append formatted line and keep last 15 events
+        line = self._format_session_line(event_str, message)
+        self._session_cache.setdefault(chan_key, []).append(line)
+        self._session_cache[chan_key] = self._session_cache[chan_key][-15:]
+
+        if not state_path:
+            return
+
+        # Upsert the session digest embed (edit-in-place or create new)
         try:
-            resp = requests.post(
-                url=self.webhook_api,
-                json=payload,
-                timeout=10,
-            )
-            if resp.status_code == 429:
-                self._rate_limiter.report_rate_limited()
-            else:
-                self._rate_limiter.report_success()
-        except requests.RequestException:
-            logger.warning("Failed to send Discord embed", exc_info=True)
+            payload = self._build_session_payload(channel, event_str)
+            self.upsert_logbook_embed(chan_key, payload, state_path)
+        except Exception:
+            logger.warning("Failed to send Discord session digest", exc_info=True)
 
     def fetch_old_messages(self, limit: int = 1000) -> list[dict]:
         """Fetch recent messages from the Discord channel.
