@@ -1811,6 +1811,7 @@ def discord_cleanup():
         )
 
     try:
+        global _telemetry
         limit = request.args.get("limit", 100, type=int)
         do_cleanup = request.args.get("cleanup", "false").lower() == "true"
         purge_mode = request.args.get("purge", "false").lower() == "true"
@@ -1821,7 +1822,6 @@ def discord_cleanup():
         event_types = set(event_filter.split(",")) if event_filter else set()
 
         if purge_mode:
-            global _telemetry
             if _telemetry is None:
                 _telemetry = Telemetry()
             deleted = discord.purge_all_messages(limit=min(limit, 500))
@@ -1880,7 +1880,6 @@ def discord_cleanup():
         # === Backup to telemetry DB before cleanup ===
         backed_up = 0
         if do_cleanup:
-            global _telemetry
             if _telemetry is None:
                 _telemetry = Telemetry()
             for msg in filtered:
