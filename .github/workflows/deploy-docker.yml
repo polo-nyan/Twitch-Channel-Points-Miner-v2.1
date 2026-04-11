@@ -10,7 +10,7 @@ on:
 jobs:
   deploy-docker:
     name: Deploy Docker Hub
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout source
         uses: actions/checkout@v4

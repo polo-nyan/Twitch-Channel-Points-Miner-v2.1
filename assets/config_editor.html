@@ -104,7 +104,7 @@
             border-color: #f9826c;
         }
         .line-info {
-            color: #888;
+            color: #9da2b8;
             font-size: 0.8rem;
             margin-top: 0.3rem;
         }
@@ -133,6 +133,162 @@
             border-radius: 3px;
             color: #f9826c;
         }
+
+        /* === TAB SYSTEM === */
+        .tab-bar {
+            display: flex;
+            gap: 0;
+            margin-bottom: 0;
+        }
+        .tab-btn {
+            padding: 0.5rem 1.2rem;
+            background: #2B2D3E;
+            border: 1px solid #555;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: background 0.15s, color 0.15s;
+        }
+        .tab-btn:hover { background: #3a3e50; color: #fff; }
+        .tab-btn.active {
+            background: #1e2233;
+            color: #f9826c;
+            border-color: #f9826c;
+            border-bottom: 1px solid #1e2233;
+        }
+        .tab-panel {
+            display: none;
+            background: #1e2233;
+            border: 1px solid #555;
+            border-radius: 0 6px 6px 6px;
+            padding: 1rem;
+        }
+        .tab-panel.active { display: block; }
+
+        /* === VISUAL EDITOR === */
+        .ve-section {
+            margin-bottom: 1.5rem;
+            background: #242838;
+            border-radius: 6px;
+            border: 1px solid #3a3f55;
+            overflow: hidden;
+        }
+        .ve-section-header {
+            background: #2e3348;
+            padding: 0.6rem 1rem;
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: #f9826c;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            user-select: none;
+        }
+        .ve-section-header:hover { background: #363b52; }
+        .ve-section-header .chevron { transition: transform 0.2s; }
+        .ve-section-header.collapsed .chevron { transform: rotate(-90deg); }
+        .ve-section-body {
+            padding: 1rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 0.75rem;
+        }
+        .ve-section-body.collapsed { display: none; }
+        .ve-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        .ve-field label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #b0b4c8;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .ve-field input[type="text"],
+        .ve-field input[type="number"],
+        .ve-field input[type="password"],
+        .ve-field select,
+        .ve-field textarea {
+            background: #1a1d2e;
+            border: 1px solid #3a3f55;
+            border-radius: 4px;
+            color: #e0e0e0;
+            padding: 0.4rem 0.6rem;
+            font-size: 0.88rem;
+            font-family: inherit;
+        }
+        .ve-field input:focus,
+        .ve-field select:focus,
+        .ve-field textarea:focus {
+            outline: none;
+            border-color: #f9826c;
+        }
+        .ve-field .hint {
+            font-size: 0.72rem;
+            color: #9da2b8;
+        }
+        .ve-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .ve-toggle input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #f9826c;
+        }
+        .ve-full-width {
+            grid-column: 1 / -1;
+        }
+
+        /* Priority Chips */
+        .priority-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.35rem 0.7rem;
+            background: #2e3348;
+            border: 1px solid #3a3f55;
+            border-radius: 16px;
+            color: #e0e0e0;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: grab;
+            user-select: none;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .priority-chip:hover { border-color: #f9826c; }
+        .priority-chip.dragging { opacity: 0.5; background: #1a1d2e; }
+        .priority-chip .chip-idx {
+            background: #f9826c;
+            color: #fff;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+        }
+
+        /* Live streamer tags */
+        .live-tag {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            background: rgba(249, 130, 108, 0.15);
+            border: 1px solid #3a3f55;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            color: #e0e0e0;
+            margin: 0.15rem;
+        }
+        .live-tag.online { border-color: #36b535; background: rgba(54, 181, 53, 0.12); }
     </style>
 </head>
 
@@ -153,42 +309,316 @@
             <button class="btn btn-revert" onclick="revertConfig()">
                 <i class="fas fa-undo"></i> Revert
             </button>
+            <button class="btn" style="background-color:#7957d5;color:#fff" onclick="exportRunPy()">
+                <i class="fas fa-file-export"></i> Export run.py
+            </button>
             <div class="status-bar" id="status-bar">
                 <span class="status-info">Loading config...</span>
             </div>
         </div>
 
-        <textarea id="config-editor" spellcheck="false"></textarea>
-        <div class="line-info" id="line-info">Line 1, Column 1</div>
+        <div id="format-badge" style="margin-bottom:0.4rem;font-size:0.85rem;color:#aaa;"></div>
+
+        <!-- Tab Bar -->
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('visual', this)"><i class="fas fa-sliders-h"></i> Visual</button>
+            <button class="tab-btn" onclick="switchTab('raw', this)"><i class="fas fa-code"></i> Raw</button>
+        </div>
+
+        <!-- Visual Editor Tab -->
+        <div class="tab-panel active" id="tab-visual">
+            <div id="ve-no-json" style="padding:2rem;text-align:center;color:#aaa;display:none;">
+                <i class="fas fa-info-circle"></i> Visual editor requires <strong>settings.json</strong> format.
+                Switch to the Raw tab to edit Python configs.
+            </div>
+            <div id="ve-form">
+                <!-- General -->
+                <div class="ve-section">
+                    <div class="ve-section-header" onclick="toggleSection(this)">
+                        <i class="fas fa-chevron-down chevron"></i> General
+                    </div>
+                    <div class="ve-section-body">
+                        <div class="ve-field">
+                            <label>Username</label>
+                            <input type="text" id="ve-username" placeholder="your_twitch_username">
+                        </div>
+                        <div class="ve-field">
+                            <label>Password</label>
+                            <input type="password" id="ve-password" placeholder="Leave blank for 2FA">
+                            <span class="hint">Prefix with $ to use env variable (e.g. $TWITCH_PASS)</span>
+                        </div>
+                        <div class="ve-field">
+                            <label>Claim Drops</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-claim-drops" checked> <span>Enabled</span></div>
+                        </div>
+                        <div class="ve-field">
+                            <label>Claim Moments</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-claim-moments" checked> <span>Enabled</span></div>
+                        </div>
+                        <div class="ve-field ve-full-width">
+                            <label>Priority Order <span class="hint">(drag to reorder)</span></label>
+                            <div id="ve-priority-list" style="display:flex;flex-wrap:wrap;gap:0.4rem;"></div>
+                            <span class="hint">Determines which streamers get watched first. Drag chips to reorder.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logger -->
+                <div class="ve-section">
+                    <div class="ve-section-header" onclick="toggleSection(this)">
+                        <i class="fas fa-chevron-down chevron"></i> Logger
+                    </div>
+                    <div class="ve-section-body">
+                        <div class="ve-field">
+                            <label>Save Logs</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-log-save" checked> <span>Enabled</span></div>
+                        </div>
+                        <div class="ve-field">
+                            <label>Less Mode</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-log-less"> <span>Shorter log lines</span></div>
+                        </div>
+                        <div class="ve-field">
+                            <label>Console Level</label>
+                            <select id="ve-log-console-level">
+                                <option value="INFO">INFO</option>
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="WARNING">WARNING</option>
+                            </select>
+                        </div>
+                        <div class="ve-field">
+                            <label>File Level</label>
+                            <select id="ve-log-file-level">
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARNING">WARNING</option>
+                            </select>
+                        </div>
+                        <div class="ve-field">
+                            <label>Emoji</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-log-emoji" checked> <span>Show emoji in logs</span></div>
+                        </div>
+                        <div class="ve-field">
+                            <label>Colored Output</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-log-colored"> <span>Colorize terminal</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Discord Notifications -->
+                <div class="ve-section">
+                    <div class="ve-section-header" onclick="toggleSection(this)">
+                        <i class="fas fa-chevron-down chevron"></i> Discord
+                    </div>
+                    <div class="ve-section-body">
+                        <div class="ve-field">
+                            <label>Webhook URL</label>
+                            <input type="text" id="ve-discord-webhook" placeholder="https://discord.com/api/webhooks/...">
+                        </div>
+                        <div class="ve-field">
+                            <label>Bot Token (optional)</label>
+                            <input type="password" id="ve-discord-bot-token" placeholder="For full message access & editing">
+                            <span class="hint">Enables backimport, message editing. Prefix with $ for env var.</span>
+                        </div>
+                        <div class="ve-field">
+                            <label>Channel ID (for bot mode)</label>
+                            <input type="text" id="ve-discord-channel-id" placeholder="1234567890">
+                        </div>
+                        <div class="ve-field ve-full-width">
+                            <label>Events</label>
+                            <div id="ve-discord-events" style="display:flex;flex-wrap:wrap;gap:0.4rem;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Telegram Notifications -->
+                <div class="ve-section">
+                    <div class="ve-section-header collapsed" onclick="toggleSection(this)">
+                        <i class="fas fa-chevron-down chevron"></i> Telegram
+                    </div>
+                    <div class="ve-section-body collapsed">
+                        <div class="ve-field">
+                            <label>Chat ID</label>
+                            <input type="text" id="ve-telegram-chat-id" placeholder="123456789">
+                        </div>
+                        <div class="ve-field">
+                            <label>Token</label>
+                            <input type="password" id="ve-telegram-token" placeholder="bot token">
+                        </div>
+                        <div class="ve-field">
+                            <label>Disable Notification</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-telegram-silent"> <span>Silent</span></div>
+                        </div>
+                        <div class="ve-field ve-full-width">
+                            <label>Events</label>
+                            <div id="ve-telegram-events" style="display:flex;flex-wrap:wrap;gap:0.4rem;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Streamer Defaults -->
+                <div class="ve-section">
+                    <div class="ve-section-header" onclick="toggleSection(this)">
+                        <i class="fas fa-chevron-down chevron"></i> Streamer Settings (Defaults)
+                    </div>
+                    <div class="ve-section-body">
+                        <div class="ve-field">
+                            <label>Make Predictions</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-ss-predictions" checked> <span>Enabled</span></div>
+                        </div>
+                        <div class="ve-field">
+                            <label>Follow Raid</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-ss-raid" checked> <span>Enabled</span></div>
+                        </div>
+                        <div class="ve-field">
+                            <label>Claim Drops</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-ss-drops" checked> <span>Enabled</span></div>
+                        </div>
+                        <div class="ve-field">
+                            <label>Watch Streak</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-ss-streak" checked> <span>Enabled</span></div>
+                        </div>
+                        <div class="ve-field">
+                            <label>Strategy</label>
+                            <select id="ve-ss-strategy">
+                                <option value="SMART">SMART</option>
+                                <option value="MOST_VOTED">MOST_VOTED</option>
+                                <option value="HIGH_ODDS">HIGH_ODDS</option>
+                                <option value="PERCENTAGE">PERCENTAGE</option>
+                                <option value="SMART_MONEY">SMART_MONEY</option>
+                                <option value="HISTORICAL">HISTORICAL</option>
+                                <option value="KELLY_CRITERION">KELLY_CRITERION</option>
+                                <option value="CONTRARIAN">CONTRARIAN</option>
+                                <option value="MOMENTUM">MOMENTUM</option>
+                                <option value="VALUE_BET">VALUE_BET</option>
+                                <option value="WEIGHTED_AVERAGE">WEIGHTED_AVERAGE</option>
+                                <option value="UNDERDOG">UNDERDOG</option>
+                            </select>
+                        </div>
+                        <div class="ve-field">
+                            <label>Max Points per Bet</label>
+                            <input type="number" id="ve-ss-max-points" placeholder="50000" min="0">
+                        </div>
+                        <div class="ve-field">
+                            <label>Percentage per Bet</label>
+                            <input type="number" id="ve-ss-percentage" placeholder="5" min="0" max="100" step="1">
+                            <span class="hint">% of balance to bet (for PERCENTAGE strategy)</span>
+                        </div>
+                        <div class="ve-field">
+                            <label>Minimum Points to Bet</label>
+                            <input type="number" id="ve-ss-min-points" placeholder="0" min="0">
+                        </div>
+                        <div class="ve-field">
+                            <label>Stealth Mode</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-ss-stealth"> <span>Enabled</span></div>
+                        </div>
+                        <div class="ve-field">
+                            <label>Chat</label>
+                            <select id="ve-ss-chat">
+                                <option value="ONLINE">ONLINE</option>
+                                <option value="ALWAYS">ALWAYS</option>
+                                <option value="NEVER">NEVER</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analytics -->
+                <div class="ve-section">
+                    <div class="ve-section-header collapsed" onclick="toggleSection(this)">
+                        <i class="fas fa-chevron-down chevron"></i> Analytics
+                    </div>
+                    <div class="ve-section-body collapsed">
+                        <div class="ve-field">
+                            <label>Enabled</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-analytics-enabled" checked> <span>Analytics Server</span></div>
+                        </div>
+                        <div class="ve-field">
+                            <label>Host</label>
+                            <input type="text" id="ve-analytics-host" placeholder="0.0.0.0">
+                        </div>
+                        <div class="ve-field">
+                            <label>Port</label>
+                            <input type="number" id="ve-analytics-port" placeholder="5005" min="1" max="65535">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Streamers List -->
+                <div class="ve-section">
+                    <div class="ve-section-header" onclick="toggleSection(this)">
+                        <i class="fas fa-chevron-down chevron"></i> Streamers
+                    </div>
+                    <div class="ve-section-body" style="display:block;">
+                        <div class="ve-field ve-full-width">
+                            <label>Auto-import from Twitch Follows</label>
+                            <div class="ve-toggle"><input type="checkbox" id="ve-followers" checked> <span>Followers mode — automatically track all followed channels</span></div>
+                        </div>
+                        <div class="ve-field ve-full-width" id="ve-followers-order-row">
+                            <label>Follow Order</label>
+                            <select id="ve-followers-order" style="max-width:200px;">
+                                <option value="ASC">Ascending (oldest first)</option>
+                                <option value="DESC">Descending (newest first)</option>
+                            </select>
+                        </div>
+                        <div id="ve-live-streamers" class="ve-full-width" style="margin-bottom:0.75rem;"></div>
+                        <div id="ve-manual-streamers" style="display:none;">
+                            <label style="font-size:0.78rem;font-weight:600;color:#b0b4c8;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:0.4rem;display:block;">Manual Streamer List</label>
+                            <div id="ve-streamers-list"></div>
+                            <button class="btn" style="background:#3273dc;color:#fff;margin-top:0.5rem;" onclick="addStreamerRow()">
+                                <i class="fas fa-plus"></i> Add Streamer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Raw Editor Tab -->
+        <div class="tab-panel" id="tab-raw">
+            <textarea id="config-editor" spellcheck="false"></textarea>
+            <div class="line-info" id="line-info">Line 1, Column 1</div>
+        </div>
 
         <div class="help-section">
             <h3><i class="fas fa-info-circle"></i> Quick Reference</h3>
             <ul>
-                <li>Edit your <code>run.py</code> config file directly in the browser</li>
-                <li><strong>Validate</strong> checks Python syntax before saving</li>
+                <li>Edit your config directly in the browser — supports both <code>settings.json</code> (JSON) and <code>run.py</code> (Python) formats</li>
+                <li><strong>Validate</strong> checks syntax (JSON or Python) before saving</li>
                 <li><strong>Save</strong> creates a <code>.bak</code> backup, validates, then writes</li>
                 <li><strong>Revert</strong> reloads the file from disk, discarding unsaved changes</li>
+                <li><strong>Export run.py</strong> generates an upstream-compatible run.py from settings.json</li>
                 <li>Available strategies: <code>SMART</code>, <code>MOST_VOTED</code>, <code>HIGH_ODDS</code>,
                     <code>PERCENTAGE</code>, <code>SMART_MONEY</code>, <code>HISTORICAL</code>,
+                    <code>KELLY_CRITERION</code>, <code>CONTRARIAN</code>, <code>MOMENTUM</code>,
+                    <code>VALUE_BET</code>, <code>WEIGHTED_AVERAGE</code>, <code>UNDERDOG</code>,
                     <code>NUMBER_1</code>–<code>NUMBER_8</code></li>
                 <li>Discord muting: <code>muted_channels=["streamer"]</code>,
                     <code>muted_events_per_channel={"streamer": [Events.BET_LOSE]}</code>,
                     <code>global_muted_events=[Events.GAIN_FOR_WATCH]</code></li>
+                <li>Secrets: In JSON mode, prefix values with <code>$</code> to read from environment variables (e.g. <code>"$TWITCH_PASSWORD"</code>)</li>
             </ul>
         </div>
     </div>
 
     <script>
         var originalContent = '';
+        var configFormat = 'python'; // 'json' or 'python'
         var editor = document.getElementById('config-editor');
         var statusBar = document.getElementById('status-bar');
         var lineInfo = document.getElementById('line-info');
+        var formatBadge = document.getElementById('format-badge');
 
         function setStatus(cls, text) {
             var span = document.createElement('span');
             span.className = cls;
             span.textContent = text;
             statusBar.replaceChildren(span);
+        }
+
+        function updateFormatBadge() {
+            var icon = configFormat === 'json' ? '{ }' : 'py';
+            var label = configFormat === 'json' ? 'JSON (settings.json)' : 'Python (run.py)';
+            formatBadge.innerHTML = '<span style="background:#555;padding:2px 8px;border-radius:3px;color:#fff;font-weight:600">' + icon + '</span> ' + label;
         }
 
         // Load config on page load
@@ -201,6 +631,8 @@
                 }
                 editor.value = data.content;
                 originalContent = data.content;
+                configFormat = data.format || 'python';
+                updateFormatBadge();
                 setStatus('status-ok', '✓ Loaded: ' + data.path);
             })
             .catch(() => {
@@ -234,7 +666,7 @@
             fetch('/api/config/validate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: editor.value })
+                body: JSON.stringify({ content: editor.value, format: configFormat })
             })
             .then(r => r.json())
             .then(data => {
@@ -257,7 +689,7 @@
             fetch('/api/config/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: editor.value })
+                body: JSON.stringify({ content: editor.value, format: configFormat })
             })
             .then(r => r.json())
             .then(data => {
@@ -283,6 +715,8 @@
                     if (data.content) {
                         editor.value = data.content;
                         originalContent = data.content;
+                        configFormat = data.format || 'python';
+                        updateFormatBadge();
                         setStatus('status-ok', '✓ Reverted to saved version');
                     }
                 });
@@ -306,6 +740,395 @@
                 e.returnValue = '';
             }
         });
+
+        function exportRunPy() {
+            if (configFormat !== 'json') {
+                setStatus('status-info', 'Export only available when editing settings.json');
+                return;
+            }
+            setStatus('status-info', 'Exporting run.py...');
+            fetch('/api/config/export')
+                .then(r => {
+                    if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Export failed'); });
+                    return r.text();
+                })
+                .then(text => {
+                    var blob = new Blob([text], { type: 'text/x-python' });
+                    var a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'run.py';
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                    setStatus('status-ok', '✓ run.py exported (upstream-compatible)');
+                })
+                .catch(err => {
+                    setStatus('status-error', '✗ ' + err.message);
+                });
+        }
+
+        /* ==================== Visual Editor ==================== */
+        var ALL_EVENTS = [
+            'BET_LOSE', 'BET_WIN', 'BET_REFUND', 'BET_PLACED',
+            'BONUS_CLAIM', 'RAID', 'GAIN_FOR_WATCH', 'GAIN_FOR_PREDICTION',
+            'DROP_CLAIM', 'DROP_STATUS', 'COMMUNITY_GOAL',
+            'CHAT_MENTION', 'STREAK', 'MOMENT_CLAIM',
+            'PREDICTION_MADE', 'PREDICTION_RESULT'
+        ];
+        var currentTab = 'visual';
+
+        function switchTab(tab, btn) {
+            if (tab === currentTab) return;
+            // Sync data when switching
+            if (currentTab === 'visual' && tab === 'raw') {
+                formToJson();
+            } else if (currentTab === 'raw' && tab === 'visual') {
+                jsonToForm();
+            }
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+            btn.classList.add('active');
+            document.getElementById('tab-' + tab).classList.add('active');
+        }
+
+        function toggleSection(header) {
+            header.classList.toggle('collapsed');
+            var body = header.nextElementSibling;
+            body.classList.toggle('collapsed');
+        }
+
+        /* Build event checkbox grids */
+        function buildEventBoxes(containerId, selected) {
+            var c = document.getElementById(containerId);
+            c.innerHTML = '';
+            ALL_EVENTS.forEach(function(ev) {
+                var lbl = document.createElement('label');
+                lbl.style.cssText = 'display:flex;align-items:center;gap:4px;padding:2px 6px;font-size:0.82rem;background:var(--ve-field-bg,#f5f7fa);border-radius:4px;cursor:pointer;';
+                var cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.value = ev;
+                if (selected && selected.indexOf(ev) !== -1) cb.checked = true;
+                lbl.appendChild(cb);
+                lbl.appendChild(document.createTextNode(ev));
+                c.appendChild(lbl);
+            });
+        }
+
+        function getCheckedEvents(containerId) {
+            var boxes = document.querySelectorAll('#' + containerId + ' input[type=checkbox]:checked');
+            var out = [];
+            boxes.forEach(function(b) { out.push(b.value); });
+            return out;
+        }
+
+        /* Streamer row management */
+        function addStreamerRow(name) {
+            var list = document.getElementById('ve-streamers-list');
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;gap:0.5rem;align-items:center;margin-bottom:0.3rem;';
+            row.innerHTML = '<input type="text" class="ve-streamer-name" value="' + (name || '') + '" placeholder="streamer_name" style="flex:1;">' +
+                '<button class="btn" style="background:#ff3860;color:#fff;padding:0.25rem 0.5rem;font-size:0.8rem;" onclick="this.parentElement.remove()"><i class="fas fa-trash"></i></button>';
+            list.appendChild(row);
+        }
+
+        /* === PRIORITY CHIPS (drag-to-reorder) === */
+        var PRIORITY_OPTIONS = ['STREAK', 'DROPS', 'ORDER', 'POINTS_ASCENDING', 'POINTS_DESCENDING'];
+        var currentPriority = [];
+
+        function buildPriorityChips(selected) {
+            currentPriority = (selected && selected.length) ? selected.slice() : ['ORDER'];
+            renderPriorityChips();
+        }
+
+        function renderPriorityChips() {
+            var c = document.getElementById('ve-priority-list');
+            c.innerHTML = '';
+            currentPriority.forEach(function(p, idx) {
+                var chip = document.createElement('div');
+                chip.className = 'priority-chip';
+                chip.draggable = true;
+                chip.dataset.idx = idx;
+                chip.innerHTML = '<span class="chip-idx">' + (idx + 1) + '</span> ' + p +
+                    ' <i class="fas fa-times" style="cursor:pointer;opacity:0.5;font-size:0.7rem;" onclick="removePriority(' + idx + ')"></i>';
+                chip.addEventListener('dragstart', function(e) {
+                    e.dataTransfer.setData('text/plain', idx);
+                    this.classList.add('dragging');
+                });
+                chip.addEventListener('dragend', function() { this.classList.remove('dragging'); });
+                chip.addEventListener('dragover', function(e) { e.preventDefault(); });
+                chip.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    var fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+                    var toIdx = parseInt(this.dataset.idx);
+                    if (fromIdx !== toIdx) {
+                        var item = currentPriority.splice(fromIdx, 1)[0];
+                        currentPriority.splice(toIdx, 0, item);
+                        renderPriorityChips();
+                    }
+                });
+                c.appendChild(chip);
+            });
+            // Add button for unused options
+            var unused = PRIORITY_OPTIONS.filter(function(o) { return currentPriority.indexOf(o) === -1; });
+            if (unused.length > 0) {
+                var addBtn = document.createElement('select');
+                addBtn.style.cssText = 'padding:0.3rem;font-size:0.78rem;background:#1a1d2e;color:#9da2b8;border:1px dashed #3a3f55;border-radius:16px;cursor:pointer;';
+                addBtn.innerHTML = '<option value="">+ Add...</option>';
+                unused.forEach(function(o) { addBtn.innerHTML += '<option value="' + o + '">' + o + '</option>'; });
+                addBtn.addEventListener('change', function() {
+                    if (this.value) {
+                        currentPriority.push(this.value);
+                        renderPriorityChips();
+                    }
+                });
+                c.appendChild(addBtn);
+            }
+        }
+
+        function removePriority(idx) {
+            currentPriority.splice(idx, 1);
+            renderPriorityChips();
+        }
+
+        /* === FOLLOWERS MODE === */
+        function toggleFollowersMode() {
+            var on = document.getElementById('ve-followers').checked;
+            document.getElementById('ve-followers-order-row').style.display = on ? '' : 'none';
+            document.getElementById('ve-manual-streamers').style.display = on ? 'none' : '';
+            if (on) loadLiveStreamers();
+            else document.getElementById('ve-live-streamers').innerHTML = '';
+        }
+
+        function loadLiveStreamers() {
+            var container = document.getElementById('ve-live-streamers');
+            container.innerHTML = '<span style="color:#9da2b8;font-size:0.8rem;"><i class="fas fa-spinner fa-spin"></i> Loading tracked streamers...</span>';
+            fetch('/streamers')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data || !data.length) {
+                        container.innerHTML = '<span style="color:#9da2b8;font-size:0.8rem;">No streamers currently tracked.</span>';
+                        return;
+                    }
+                    container.innerHTML = '<label style="font-size:0.72rem;font-weight:600;color:#9da2b8;text-transform:uppercase;margin-bottom:0.3rem;display:block;">Currently Tracked (' + data.length + ')</label>';
+                    data.forEach(function(s) {
+                        var name = (s.name || s).replace('.json', '');
+                        var tag = document.createElement('span');
+                        tag.className = 'live-tag';
+                        tag.textContent = name;
+                        if (s.points) tag.textContent += ' (' + s.points.toLocaleString() + ')';
+                        container.appendChild(tag);
+                    });
+                })
+                .catch(function() {
+                    container.innerHTML = '<span style="color:#ff3860;font-size:0.8rem;">Failed to load streamers.</span>';
+                });
+        }
+
+        document.getElementById('ve-followers').addEventListener('change', toggleFollowersMode);
+
+        /* Populate form from JSON config */
+        function jsonToForm() {
+            var noJson = document.getElementById('ve-no-json');
+            var form = document.getElementById('ve-form');
+            if (configFormat !== 'json') {
+                noJson.style.display = 'block';
+                form.style.display = 'none';
+                return;
+            }
+            noJson.style.display = 'none';
+            form.style.display = 'block';
+            var cfg;
+            try {
+                cfg = JSON.parse(editor.value);
+            } catch (e) {
+                noJson.style.display = 'block';
+                noJson.innerHTML = '<i class="fas fa-exclamation-triangle"></i> JSON parse error: ' + e.message + '<br>Fix it in the Raw tab.';
+                form.style.display = 'none';
+                return;
+            }
+
+            // General
+            _setVal('ve-username', cfg.username || '');
+            _setVal('ve-password', cfg.password || '');
+            _setCk('ve-claim-drops', cfg.claim_drops_startup !== false);
+            _setCk('ve-claim-moments', cfg.claim_moments !== false);
+            buildPriorityChips(cfg.priority || []);
+
+            // Followers mode
+            var isFollowers = cfg.followers !== false;
+            _setCk('ve-followers', isFollowers);
+            _setVal('ve-followers-order', cfg.followers_order || 'ASC');
+            toggleFollowersMode();
+
+            // Logger
+            var lg = cfg.logger || {};
+            _setCk('ve-log-save', lg.save !== false);
+            _setCk('ve-log-less', !!lg.less);
+            _setVal('ve-log-console-level', lg.console_level || 'INFO');
+            _setVal('ve-log-file-level', lg.file_level || 'DEBUG');
+            _setCk('ve-log-emoji', lg.emoji !== false);
+            _setCk('ve-log-colored', !!lg.colored);
+
+            // Discord
+            var dc = cfg.discord || {};
+            _setVal('ve-discord-webhook', dc.webhook_api || '');
+            _setVal('ve-discord-bot-token', dc.bot_token || '');
+            _setVal('ve-discord-channel-id', dc.channel_id || '');
+            buildEventBoxes('ve-discord-events', dc.events || []);
+
+            // Telegram
+            var tg = cfg.telegram || {};
+            _setVal('ve-telegram-chat-id', tg.chat_id || '');
+            _setVal('ve-telegram-token', tg.token || '');
+            _setCk('ve-telegram-silent', !!tg.disable_notification);
+            buildEventBoxes('ve-telegram-events', tg.events || []);
+
+            // Streamer settings
+            var ss = cfg.streamer_settings || {};
+            var bet = ss.bet || {};
+            _setCk('ve-ss-predictions', ss.make_predictions !== false);
+            _setCk('ve-ss-raid', ss.follow_raid !== false);
+            _setCk('ve-ss-drops', ss.claim_drops !== false);
+            _setCk('ve-ss-streak', ss.watch_streak !== false);
+            _setVal('ve-ss-strategy', bet.strategy || 'SMART');
+            _setVal('ve-ss-max-points', bet.max_points || '');
+            _setVal('ve-ss-percentage', bet.percentage || '');
+            _setVal('ve-ss-min-points', bet.minimum_points || '');
+            _setCk('ve-ss-stealth', !!bet.stealth_mode);
+            _setVal('ve-ss-chat', ss.chat || 'ONLINE');
+
+            // Analytics
+            var an = cfg.analytics || {};
+            _setCk('ve-analytics-enabled', an.enabled !== false);
+            _setVal('ve-analytics-host', an.host || '');
+            _setVal('ve-analytics-port', an.port || '');
+
+            // Streamers
+            var sl = document.getElementById('ve-streamers-list');
+            sl.innerHTML = '';
+            (cfg.streamers || []).forEach(function(s) {
+                addStreamerRow(typeof s === 'string' ? s : (s.username || ''));
+            });
+            // Followers mode toggle state
+            toggleFollowersMode();
+        }
+
+        /* Collect form values into JSON and push to raw editor */
+        function formToJson() {
+            if (configFormat !== 'json') return;
+            var cfg;
+            try {
+                cfg = JSON.parse(editor.value);
+            } catch (e) {
+                cfg = {};
+            }
+
+            cfg.username = _getVal('ve-username') || cfg.username;
+            if (_getVal('ve-password')) cfg.password = _getVal('ve-password');
+            cfg.claim_drops_startup = _getCk('ve-claim-drops');
+            cfg.claim_moments = _getCk('ve-claim-moments');
+            cfg.priority = currentPriority.length ? currentPriority.slice() : undefined;
+            cfg.followers = _getCk('ve-followers');
+            cfg.followers_order = _getVal('ve-followers-order');
+
+            // Logger
+            if (!cfg.logger) cfg.logger = {};
+            cfg.logger.save = _getCk('ve-log-save');
+            cfg.logger.less = _getCk('ve-log-less');
+            cfg.logger.console_level = _getVal('ve-log-console-level');
+            cfg.logger.file_level = _getVal('ve-log-file-level');
+            cfg.logger.emoji = _getCk('ve-log-emoji');
+            cfg.logger.colored = _getCk('ve-log-colored');
+
+            // Discord
+            if (!cfg.discord) cfg.discord = {};
+            cfg.discord.webhook_api = _getVal('ve-discord-webhook');
+            var bt = _getVal('ve-discord-bot-token');
+            if (bt) cfg.discord.bot_token = bt; else delete cfg.discord.bot_token;
+            var chid = _getVal('ve-discord-channel-id');
+            if (chid) cfg.discord.channel_id = chid; else delete cfg.discord.channel_id;
+            var dEvts = getCheckedEvents('ve-discord-events');
+            if (dEvts.length > 0) cfg.discord.events = dEvts; else delete cfg.discord.events;
+
+            // Telegram
+            if (!cfg.telegram) cfg.telegram = {};
+            cfg.telegram.chat_id = _getVal('ve-telegram-chat-id');
+            cfg.telegram.token = _getVal('ve-telegram-token');
+            cfg.telegram.disable_notification = _getCk('ve-telegram-silent');
+            var tEvts = getCheckedEvents('ve-telegram-events');
+            if (tEvts.length > 0) cfg.telegram.events = tEvts; else delete cfg.telegram.events;
+            // Clean empty objects
+            if (!cfg.telegram.chat_id && !cfg.telegram.token) delete cfg.telegram;
+
+            // Streamer settings
+            if (!cfg.streamer_settings) cfg.streamer_settings = {};
+            cfg.streamer_settings.make_predictions = _getCk('ve-ss-predictions');
+            cfg.streamer_settings.follow_raid = _getCk('ve-ss-raid');
+            cfg.streamer_settings.claim_drops = _getCk('ve-ss-drops');
+            cfg.streamer_settings.watch_streak = _getCk('ve-ss-streak');
+            cfg.streamer_settings.chat = _getVal('ve-ss-chat');
+            if (!cfg.streamer_settings.bet) cfg.streamer_settings.bet = {};
+            cfg.streamer_settings.bet.strategy = _getVal('ve-ss-strategy');
+            var mp = _getVal('ve-ss-max-points');
+            if (mp) cfg.streamer_settings.bet.max_points = parseInt(mp, 10);
+            var pc = _getVal('ve-ss-percentage');
+            if (pc) cfg.streamer_settings.bet.percentage = parseInt(pc, 10);
+            var mnp = _getVal('ve-ss-min-points');
+            if (mnp) cfg.streamer_settings.bet.minimum_points = parseInt(mnp, 10);
+            cfg.streamer_settings.bet.stealth_mode = _getCk('ve-ss-stealth');
+
+            // Analytics
+            if (!cfg.analytics) cfg.analytics = {};
+            cfg.analytics.enabled = _getCk('ve-analytics-enabled');
+            var ah = _getVal('ve-analytics-host');
+            if (ah) cfg.analytics.host = ah;
+            var ap = _getVal('ve-analytics-port');
+            if (ap) cfg.analytics.port = parseInt(ap, 10);
+
+            // Streamers
+            if (!_getCk('ve-followers')) {
+                var names = [];
+                document.querySelectorAll('.ve-streamer-name').forEach(function(inp) {
+                    var v = inp.value.trim();
+                    if (v) names.push(v);
+                });
+                cfg.streamers = names;
+                delete cfg.followers;
+                delete cfg.followers_order;
+            } else {
+                cfg.streamers = [];
+            }
+
+            editor.value = JSON.stringify(cfg, null, 4);
+        }
+
+        /* Helpers */
+        function _setVal(id, v) { var el = document.getElementById(id); if (el) el.value = v; }
+        function _setCk(id, v) { var el = document.getElementById(id); if (el) el.checked = !!v; }
+        function _getVal(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+        function _getCk(id) { var el = document.getElementById(id); return el ? el.checked : false; }
+
+        /* After config loads, populate visual form */
+        var configLoaded = false;
+        (function() {
+            var _realSetStatus = setStatus;
+            setStatus = function(cls, text) {
+                _realSetStatus(cls, text);
+                if (cls === 'status-ok' && !configLoaded) {
+                    configLoaded = true;
+                    jsonToForm();
+                }
+            };
+        })();
+
+        /* Override saveConfig to sync from visual editor first */
+        (function() {
+            var _realSave = saveConfig;
+            saveConfig = function() {
+                if (currentTab === 'visual') formToJson();
+                _realSave();
+            };
+        })();
     </script>
 </body>
 </html>

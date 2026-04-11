@@ -1,10 +1,10 @@
 import json
 import logging
+import os
 import random
 import time
-# import os
+from datetime import datetime
 from threading import Thread, Timer
-# from pathlib import Path
 
 from dateutil import parser
 
@@ -168,6 +168,23 @@ class WebSocketsPool:
                 event_prediction.dry_run_results,
             )
 
+            # Also persist to SQLite telemetry
+            try:
+                from TwitchChannelPointsMiner.classes.Telemetry import Telemetry
+                import os
+                db_path = os.path.join(Settings.analytics_path, "telemetry.db")
+                if os.path.isfile(db_path):
+                    tel = Telemetry(db_path)
+                    tel.record_dry_run_results(
+                        timestamp=datetime.now().isoformat(),
+                        streamer=streamer.username,
+                        event_title=event_prediction.title,
+                        active_strategy=active_strategy,
+                        dry_run_results=event_prediction.dry_run_results,
+                    )
+            except Exception:
+                logger.debug("Failed to persist dry-run to SQLite", exc_info=True)
+
     @staticmethod
     def on_open(ws):
         def run():
@@ -206,6 +223,9 @@ class WebSocketsPool:
         # On close please reconnect automatically
         WebSocketsPool.handle_reconnection(ws)
 
+    # Backoff schedule: attempts -> sleep seconds
+    _BACKOFF_SCHEDULE = [5, 10, 30, 60, 60, 60]
+
     @staticmethod
     def handle_reconnection(ws):
         # Reconnect only if ws.is_reconnecting is False to prevent more than 1 ws from being created
@@ -220,10 +240,19 @@ class WebSocketsPool:
             ws.is_reconnecting = True
 
             if ws.forced_close is False:
+                # Exponential backoff with jitter
+                attempt = getattr(ws, 'reconnect_attempts', 0)
+                schedule = WebSocketsPool._BACKOFF_SCHEDULE
+                base_delay = schedule[min(attempt, len(schedule) - 1)]
+                jitter = random.uniform(0, base_delay * 0.25)
+                delay = base_delay + jitter
+                ws.reconnect_attempts = attempt + 1
+
                 logger.info(
-                    f"#{ws.index} - Reconnecting to Twitch PubSub server in ~60 seconds"
+                    f"#{ws.index} - Reconnecting to Twitch PubSub server in ~{base_delay}s "
+                    f"(attempt {ws.reconnect_attempts})"
                 )
-                time.sleep(30)
+                time.sleep(delay)
 
                 while internet_connection_available() is False:
                     random_sleep = random.randint(1, 3)
@@ -235,10 +264,12 @@ class WebSocketsPool:
                 # Why not create a new ws on the same array index? Let's try.
                 self = ws.parent_pool
                 # Create a new connection.
-                self.ws[ws.index] = self.__new(ws.index)
+                new_ws = self.__new(ws.index)
+                new_ws.reconnect_attempts = ws.reconnect_attempts
+                self.ws[ws.index] = new_ws
 
                 self.__start(ws.index)  # Start a new thread.
-                time.sleep(30)
+                time.sleep(5)
 
                 for topic in ws.topics:
                     self.__submit(ws.index, topic)
@@ -543,3 +574,5 @@ class WebSocketsPool:
 
         elif response["type"] == "PONG":
             ws.last_pong = time.time()
+            # Reset backoff counter on successful PONG
+            ws.reconnect_attempts = 0

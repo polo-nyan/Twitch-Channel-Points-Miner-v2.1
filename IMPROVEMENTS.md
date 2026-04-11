@@ -1,63 +1,75 @@
-# 25-Point Improvement Plan
+# Improvement Plan
 
-A roadmap of 25 actionable improvements for `Twitch-Channel-Points-Miner-v2.1`.
+Status of the previous 25-point roadmap and the next set of priorities.
 
-## 🔴 Critical / High Priority
+## Completed
 
-1. **Add unit tests** — Create a test suite covering core logic (`Bet.calculate`, `Strategy` selection, `DryRunResult` scoring, filter conditions). Use `pytest` with fixtures.
+| # | Feature | Notes |
+|---|---------|-------|
+| 2 | Input validation for config editor | `_DANGEROUS_PATTERNS` regex in AnalyticsServer blocks `eval`, `exec`, `os.system`, etc. |
+| 3 | Secrets management | `settings.json` supports `$ENV_VAR` references; `python-dotenv` loads `.env` at startup |
+| 4 | Rate limiting for all notification providers | Shared `RateLimiter` class (token-bucket + exponential backoff with jitter). Applied to Discord, Telegram, Matrix, Pushover, Gotify. 429 detection auto-backs off. |
+| 5 | WebSocket exponential backoff | `_BACKOFF_SCHEDULE = [5, 10, 30, 60, 60, 60]` with jitter. Counter carried across reconnects, reset on PONG. |
+| 7 | Cross-streamer aggregate dashboard | `/api/global_stats` endpoint — total points, overall win rate, most profitable streamer. Rendered as stat cards above chart. |
+| 8 | CSV/JSON analytics export | `/api/export/csv?streamer=X` and `/api/export/json?streamer=X` endpoints. Export buttons in dashboard toolbar. |
+| 10 | Prediction confidence score | HISTORICAL strategy emits `confidence: 0.0–1.0` (sample size + margin + consistency). Logged on bet placement. |
+| 11 | Mobile-responsive dashboard | Full CSS rewrite: CSS Grid layout, responsive breakpoints, sidebar collapses on mobile. Bulma removed. |
+| 12 | Hot-reload settings.json | Polls every 60s in main loop. On change: re-parses JSON, rebuilds `StreamerSettings`/`BetSettings`, logs diff. No restart needed. |
+| 13 | Dashboard overhaul | Modern card-based CSS, dark theme, stat cards, sidebar streamer list, sort dropdown, export buttons, global stats panel. |
+| 14 | Streamer status indicators | ACTIVE / BEST badges rendered in the dashboard sidebar |
+| 15 | Dark/light theme | Toggle with localStorage persistence in dashboard + config editor |
+| 16 | Type hints | Annotations present on all public loader / builder functions |
+| 25 | Health check endpoint | `/health` returns status, uptime, streamer count |
 
-2. **Input validation for config editor** — The web config editor currently accepts any Python code; add sandboxed validation that checks for dangerous imports (`os.system`, `subprocess`, `eval`) before saving.
+## Completed — Fork-Specific Features
 
-3. **Secrets management** — Move sensitive values (webhook URLs, Twitch credentials) out of `run.py` into environment variables or a `.env` file with `python-dotenv`.
+| Feature | Description |
+|---------|-------------|
+| `settings.json` config system | Declarative JSON replaces manual `run.py` editing; auto-detected at startup |
+| `main.py` entrypoint | Auto-detects `settings.json` → JSON mode, `run.py` → legacy exec, or `--config` flag |
+| `export.py` | Generates upstream-compatible `run.py` from `settings.json`; gracefully downgrades fork-only strategies |
+| Web config editor (dual-mode) | Reads/writes both `settings.json` (JSON) and `run.py` (Python); export button downloads run.py |
+| `/api/config/export` | REST endpoint to generate and download an upstream-compatible `run.py` |
+| 6 new prediction strategies | KELLY_CRITERION, CONTRARIAN, MOMENTUM, VALUE_BET, WEIGHTED_AVERAGE, UNDERDOG |
+| Discord back-import | `cleanup_and_repost()`: fetches old webhook messages, parses predictions/raids/bets via regex, deletes plain-text, re-posts as rich embeds |
+| Dockerfile rewrite | `python:3.12-slim-bookworm`, consolidated layers, HEALTHCHECK, COPY instead of ADD, removed unnecessary build deps |
+| `.env` / `python-dotenv` | Secrets loaded from `.env` file before settings are parsed |
+| Self-hosted CI | All GitHub Actions workflows changed from `ubuntu-latest` to `self-hosted` |
 
-4. **Rate limiting for Discord/Telegram** — Add proper rate-limit handling with exponential backoff for all notification providers, not just Discord.
+---
 
-5. **Error recovery for WebSocket disconnects** — Improve reconnection logic to handle edge cases (partial subscriptions, stale topics after long disconnects).
+## Next Priorities
 
-## 🟡 Medium Priority — Features
+### 🔴 Critical
 
-6. **File watcher for config hot-reload** — Use `watchdog` library to detect `run.py` changes on disk and trigger a validated reload without restarting the miner.
+1. **Add unit tests** — `pytest` suite for `Bet.calculate` (all 20 strategies), `settings_loader` round-trip, `export` downgrade logic, filter conditions. Target: 80% coverage of `Bet.py` and `settings_loader.py`.
 
-7. **Discord slash commands** — Add a Discord bot that responds to commands like `/status`, `/mute <channel>`, `/unmute <channel>`, `/stats` for interactive control.
+### 🟡 Medium — Features
 
-8. **Prediction confidence scoring** — Extend the HISTORICAL strategy to output a confidence score (0–100%) based on sample size and consistency of historical data.
+2. **Discord slash commands** — `/status`, `/mute <channel>`, `/unmute <channel>`, `/strategy <channel> <strategy>`, `/export`. Requires a Discord Bot token (separate from webhook).
 
-9. **Multi-account support** — Allow running multiple Twitch accounts from a single process with separate config sections and shared analytics.
+3. **Multi-account support** — `settings.json` accepts an `accounts[]` array; each account runs in its own thread with separate auth/WebSocket/analytics but shared process.
 
-10. **Export analytics to CSV/JSON** — Add an API endpoint and UI button to export streamer analytics data for external analysis.
+4. **Per-strategy time-series charts** — Extend dry-run data to include timestamps; render a line chart showing cumulative points per strategy over time.
 
-## 🟢 Medium Priority — UX / Quality
+5. **Notification digest mode** — Batch notifications into 30-minute digests. Configurable per provider via `"digest_interval_minutes": 30`.
 
-11. **Mobile-responsive web UI** — The current dashboard is optimized for desktop; add responsive breakpoints and touch-friendly controls.
+### 🟢 Medium — Quality
 
-12. **Notification grouping / digest mode** — Instead of sending individual Discord messages, batch notifications into periodic digest summaries (e.g., every 30 minutes).
+6. **Structured JSON logging** — Optional `"log_format": "json"` in settings. Each log line becomes `{"ts":..., "level":..., "msg":..., "event":..., "streamer":...}`.
 
-13. **Dashboard global stats panel** — Show aggregate stats across all streamers: total points earned, overall win rate, most profitable streamer, time mining.
+7. **Pin dependency versions** — Generate `requirements.lock` with exact versions. Keep `requirements.txt` as minimums for compatibility.
 
-14. **Streamer status indicators** — Add online/offline badges next to streamer names in the dashboard sidebar.
+8. **Pre-commit: mypy + bandit** — Add `mypy --strict` and `bandit -r TwitchChannelPointsMiner/` to `.pre-commit-config.yaml`.
 
-15. **Dark/light theme for config editor** — The config editor is dark-only; add a light theme toggle matching the main dashboard.
+### 🔵 Lower Priority
 
-## 🔵 Lower Priority — Technical Debt
+9. **Replace `__slots__` with dataclasses** — Modernise `Bet`, `BetSettings`, `DryRunResult`, `EventPrediction`, `Streamer`, `StreamerSettings`.
 
-16. **Type hints throughout codebase** — Add Python type annotations to all public methods for better IDE support and static analysis.
+10. **Plugin system for strategies** — `strategies/` folder; each `.py` file exports a `def choose(outcomes, settings) -> int`. Auto-discovered at startup.
 
-17. **Replace `__slots__` with dataclasses** — Modernize entity classes (`Bet`, `BetSettings`, `DryRunResult`, `EventPrediction`, `Streamer`) using `@dataclass`.
+11. **Twitch EventSub migration** — PubSub deprecated. Build EventSub WebSocket transport alongside PubSub; feature-flag to switch.
 
-18. **Logging structured data** — Switch from string concatenation in log messages to structured logging (JSON format option) for better log aggregation.
+12. **Localization / i18n** — String keys for UI labels and Discord embed text. Language files in `locales/`.
 
-19. **Pin dependency versions** — `requirements.txt` has unpinned dependencies; pin exact versions and add `requirements-dev.txt` for development tools.
-
-20. **Pre-commit hooks** — Extend `.pre-commit-config.yaml` to include `mypy` type checking and security scanning (`bandit`).
-
-## ⚪ Nice to Have
-
-21. **Twitch EventSub migration** — Twitch PubSub is deprecated; begin migration to EventSub WebSocket for future-proofing.
-
-22. **Plugin system for strategies** — Allow users to define custom strategies as Python modules in a `strategies/` folder without modifying core code.
-
-23. **Historical data visualization** — Add time-series charts showing strategy performance over time (not just current totals).
-
-24. **Localization / i18n** — Support multiple languages for the web UI and Discord notifications.
-
-25. **Health check endpoint** — Add a `/health` API endpoint that returns miner status, uptime, connected streamers, and WebSocket health for monitoring tools (e.g., Uptime Kuma).
+13. **Import run.py → settings.json** — AST-based parser that extracts username, password, streamers, bet settings from a `run.py` and writes `settings.json`. Enables one-click migration in web UI.

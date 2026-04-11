@@ -1,0 +1,111 @@
+{
+    "username": "your-twitch-username",
+    "password": "",
+    "claim_drops_startup": false,
+    "enable_analytics": false,
+    "disable_ssl_cert_verification": false,
+    "disable_at_in_nickname": false,
+    "priority": ["STREAK", "DROPS", "ORDER"],
+
+    "logger": {
+        "save": true,
+        "less": false,
+        "console_level": "INFO",
+        "console_username": false,
+        "time_zone": "",
+        "file_level": "DEBUG",
+        "emoji": true,
+        "colored": true,
+        "auto_clear": true,
+        "color_palette": {
+            "STREAMER_ONLINE": "GREEN",
+            "STREAMER_OFFLINE": "RED",
+            "BET_WIN": "MAGENTA"
+        },
+        "telegram": null,
+        "discord": null,
+        "webhook": null,
+        "matrix": null,
+        "pushover": null,
+        "gotify": null
+    },
+
+    "telegram": {
+        "chat_id": 0,
+        "token": "",
+        "events": ["STREAMER_ONLINE", "STREAMER_OFFLINE", "BET_LOSE", "CHAT_MENTION"],
+        "disable_notification": true
+    },
+
+    "discord": {
+        "webhook_api": "",
+        "events": ["STREAMER_ONLINE", "STREAMER_OFFLINE", "BET_LOSE", "CHAT_MENTION"],
+        "muted_channels": [],
+        "muted_events_per_channel": {},
+        "global_muted_events": [],
+        "bot_token": "",
+        "channel_id": ""
+    },
+
+    "streamer_settings": {
+        "make_predictions": true,
+        "follow_raid": true,
+        "claim_drops": true,
+        "claim_moments": true,
+        "watch_streak": true,
+        "community_goals": false,
+        "chat": "ONLINE",
+        "bet": {
+            "strategy": "SMART",
+            "percentage": 5,
+            "percentage_gap": 20,
+            "max_points": 50000,
+            "minimum_points": 20000,
+            "stealth_mode": true,
+            "delay_mode": "FROM_END",
+            "delay": 6,
+            "filter_condition": {
+                "by": "TOTAL_USERS",
+                "where": "LTE",
+                "value": 800
+            }
+        }
+    },
+
+    "analytics": {
+        "enabled": false,
+        "host": "127.0.0.1",
+        "port": 5000,
+        "refresh": 5,
+        "days_ago": 7
+    },
+
+    "streamers": [
+        "streamer-username01",
+        "streamer-username02",
+        {
+            "username": "streamer-username03",
+            "settings": {
+                "make_predictions": true,
+                "follow_raid": false,
+                "watch_streak": true,
+                "community_goals": true,
+                "bet": {
+                    "strategy": "SMART",
+                    "percentage": 5,
+                    "stealth_mode": false,
+                    "percentage_gap": 30,
+                    "max_points": 50000,
+                    "filter_condition": {
+                        "by": "ODDS",
+                        "where": "LT",
+                        "value": 300
+                    }
+                }
+            }
+        }
+    ],
+
+    "followers": false,
+    "followers_order": "ASC"
+}

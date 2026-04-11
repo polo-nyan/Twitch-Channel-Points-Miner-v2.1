@@ -778,8 +778,10 @@ class Twitch(object):
                 )
             else:
                 if decision["amount"] >= 10:
+                    conf = decision.get("confidence")
+                    conf_str = f" (confidence: {conf})" if conf is not None else ""
                     logger.info(
-                        f"Place {_millify(decision['amount'])} channel points on: {event.bet.get_outcome(decision['choice'])}",
+                        f"Place {_millify(decision['amount'])} channel points on: {event.bet.get_outcome(decision['choice'])}{conf_str}",
                         extra={
                             "emoji": ":four_leaf_clover:",
                             "event": Events.BET_GENERAL,

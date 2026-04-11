@@ -14,6 +14,12 @@ class Strategy(Enum):
     SMART_MONEY = auto()
     SMART = auto()
     HISTORICAL = auto()
+    KELLY_CRITERION = auto()
+    CONTRARIAN = auto()
+    MOMENTUM = auto()
+    VALUE_BET = auto()
+    WEIGHTED_AVERAGE = auto()
+    UNDERDOG = auto()
     NUMBER_1 = auto()
     NUMBER_2 = auto()
     NUMBER_3 = auto()
@@ -300,9 +306,15 @@ class Bet(object):
         Uses dry_run_predictions from historical_outcomes (loaded from analytics JSON)
         to determine which outcome index historically performs best.
         Falls back to SMART strategy if no historical data is available.
+
+        Also sets self.decision["confidence"] (0.0–1.0) based on:
+          - sample_size: more data → higher confidence (sigmoid-like curve)
+          - win_rate_consistency: less variance across history → higher confidence
+          - score_margin: bigger gap between best and 2nd best → higher confidence
         """
         history = getattr(self.settings, "historical_outcomes", [])
         if not history:
+            self.decision["confidence"] = 0.0
             # Fall back to SMART strategy logic
             difference = abs(
                 self.outcomes[0][OutcomeKeys.PERCENTAGE_USERS]
@@ -354,6 +366,140 @@ class Bet(object):
         best = 0
         for i in range(1, num_outcomes):
             if scores[i] > scores[best]:
+                best = i
+
+        # --- Confidence scoring ---
+        total_samples = sum(win_counts) + sum(loss_counts)
+        # Sample size factor: sigmoid curve – 10 samples ≈ 0.5, 30+ ≈ 0.9
+        sample_conf = 1.0 - (1.0 / (1.0 + total_samples / 10.0))
+        # Score margin: how far best is ahead of runner-up
+        sorted_scores = sorted(scores, reverse=True)
+        if len(sorted_scores) >= 2 and sorted_scores[0] > 0:
+            margin_conf = min((sorted_scores[0] - sorted_scores[1]) / sorted_scores[0], 1.0)
+        else:
+            margin_conf = 0.0
+        # Win-rate consistency: best outcome's raw win rate
+        best_total = win_counts[best] + loss_counts[best]
+        consistency_conf = (win_counts[best] / best_total) if best_total > 0 else 0.5
+
+        self.decision["confidence"] = round(
+            sample_conf * 0.4 + margin_conf * 0.3 + consistency_conf * 0.3, 3
+        )
+
+        return best
+
+    def __kelly_choice(self) -> int:
+        """Kelly Criterion: choose the outcome that maximises expected geometric
+        growth.  Kelly fraction = (bp - q) / b  where b = odds-1, p = implied
+        probability from voter %, q = 1 - p.  Pick the outcome with the highest
+        positive Kelly fraction (meaning the market thinks it's the best value)."""
+        num = len(self.outcomes)
+        best = 0
+        best_kelly = -1.0
+        for i in range(num):
+            odds = self.outcomes[i].get(OutcomeKeys.ODDS, 1)
+            if odds <= 1:
+                continue
+            b = odds - 1.0
+            p = self.outcomes[i].get(OutcomeKeys.PERCENTAGE_USERS, 50) / 100.0
+            q = 1.0 - p
+            kelly = (b * p - q) / b if b > 0 else 0
+            if kelly > best_kelly:
+                best_kelly = kelly
+                best = i
+        return best
+
+    def __contrarian_choice(self) -> int:
+        """Contrarian: bet against the crowd.  Pick the least-voted outcome,
+        which by definition offers the highest payout odds."""
+        least = 0
+        for i in range(1, len(self.outcomes)):
+            if self.outcomes[i][OutcomeKeys.TOTAL_USERS] < self.outcomes[least][OutcomeKeys.TOTAL_USERS]:
+                least = i
+        return least
+
+    def __momentum_choice(self) -> int:
+        """Momentum: combine voter count momentum with points momentum.
+        The outcome attracting the most *points per voter* is trending hardest
+        among informed bettors (those putting real points behind it)."""
+        best = 0
+        best_ratio = 0.0
+        for i in range(len(self.outcomes)):
+            users = self.outcomes[i].get(OutcomeKeys.TOTAL_USERS, 0)
+            points = self.outcomes[i].get(OutcomeKeys.TOTAL_POINTS, 0)
+            ratio = points / max(users, 1)
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best = i
+        return best
+
+    def __value_bet_choice(self) -> int:
+        """Value Bet: identify the outcome where the implied probability from
+        the voter split is significantly higher than the implied probability
+        from the points split.  This means the crowd *believes* in it more
+        than the smart money, suggesting value."""
+        best = 0
+        best_diff = -999.0
+        for i in range(len(self.outcomes)):
+            user_pct = self.outcomes[i].get(OutcomeKeys.PERCENTAGE_USERS, 0)
+            odds_pct = self.outcomes[i].get(OutcomeKeys.ODDS_PERCENTAGE, 0)
+            # Positive diff means voters like it more than the point-weighted odds suggest
+            diff = user_pct - odds_pct
+            if diff > best_diff:
+                best_diff = diff
+                best = i
+        return best
+
+    def __weighted_average_choice(self) -> int:
+        """Weighted Average: score each outcome with a balanced blend of all
+        available signals — voter %, odds %, points-per-user ratio, and top-
+        predictor conviction.  Normalise each to 0-1 and take maximum."""
+        num = len(self.outcomes)
+        scores = [0.0] * num
+
+        # Normalisation helpers
+        def _norm(values):
+            mx = max(values) if values else 1
+            return [(v / mx) if mx > 0 else 0 for v in values]
+
+        user_pcts = [self.outcomes[i].get(OutcomeKeys.PERCENTAGE_USERS, 0) for i in range(num)]
+        odds_pcts = [self.outcomes[i].get(OutcomeKeys.ODDS_PERCENTAGE, 0) for i in range(num)]
+        ppu = [
+            self.outcomes[i].get(OutcomeKeys.TOTAL_POINTS, 0) / max(self.outcomes[i].get(OutcomeKeys.TOTAL_USERS, 1), 1)
+            for i in range(num)
+        ]
+        tops = [self.outcomes[i].get(OutcomeKeys.TOP_POINTS, 0) for i in range(num)]
+
+        n_user = _norm(user_pcts)
+        n_odds = _norm(odds_pcts)
+        n_ppu = _norm(ppu)
+        n_top = _norm(tops)
+
+        for i in range(num):
+            scores[i] = 0.30 * n_user[i] + 0.25 * n_odds[i] + 0.25 * n_ppu[i] + 0.20 * n_top[i]
+
+        best = 0
+        for i in range(1, num):
+            if scores[i] > scores[best]:
+                best = i
+        return best
+
+    def __underdog_choice(self) -> int:
+        """Underdog: always pick the outcome with the highest odds (lowest
+        total points bet).  Similar to HIGH_ODDS but also considers that
+        outcomes with very few points but decent voter counts often represent
+        a mis-priced underdog.  Falls back to pure odds."""
+        best = 0
+        best_odds = 0.0
+        for i in range(len(self.outcomes)):
+            odds = self.outcomes[i].get(OutcomeKeys.ODDS, 0)
+            users = self.outcomes[i].get(OutcomeKeys.TOTAL_USERS, 0)
+            # Boost odds score when a reasonable number of users also picked it
+            # This avoids outcomes with 0 users and infinite implied odds
+            boost = min(users / max(self.total_users, 1), 1.0) if self.total_users > 0 else 0.5
+            score = odds * (0.7 + 0.3 * boost)
+            if score > best_odds:
+                best_odds = score
                 best = i
         return best
 
@@ -432,6 +578,18 @@ class Bet(object):
             )
         elif self.settings.strategy == Strategy.HISTORICAL:
             self.decision["choice"] = self.__historical_choice()
+        elif self.settings.strategy == Strategy.KELLY_CRITERION:
+            self.decision["choice"] = self.__kelly_choice()
+        elif self.settings.strategy == Strategy.CONTRARIAN:
+            self.decision["choice"] = self.__contrarian_choice()
+        elif self.settings.strategy == Strategy.MOMENTUM:
+            self.decision["choice"] = self.__momentum_choice()
+        elif self.settings.strategy == Strategy.VALUE_BET:
+            self.decision["choice"] = self.__value_bet_choice()
+        elif self.settings.strategy == Strategy.WEIGHTED_AVERAGE:
+            self.decision["choice"] = self.__weighted_average_choice()
+        elif self.settings.strategy == Strategy.UNDERDOG:
+            self.decision["choice"] = self.__underdog_choice()
 
         if self.decision["choice"] is not None:
             index = self.decision["choice"]

@@ -69,6 +69,8 @@ class TwitchChannelPointsMiner:
         "original_streamers",
         "logs_file",
         "queue_listener",
+        "_settings_mtime",
+        "_settings_path",
     ]
 
     def __init__(
@@ -148,6 +150,9 @@ class TwitchChannelPointsMiner:
         self.sync_campaigns_thread = None
         self.ws_pool = None
 
+        self._settings_mtime = 0.0
+        self._settings_path = ""
+
         self.session_id = str(uuid.uuid4())
         self.running = False
         self.start_datetime = None
@@ -200,6 +205,73 @@ class TwitchChannelPointsMiner:
             http_server.start()
         else:
             logger.error("Can't start analytics(), please set enable_analytics=True")
+
+    def _check_settings_reload(self):
+        """Hot-reload settings.json when it changes on disk.
+
+        Only mutable settings are updated: streamer_settings (bet strategy,
+        percentages, etc.) and per-streamer overrides.  Structural changes
+        like adding/removing streamers require a restart.
+        """
+        if not self._settings_path:
+            for candidate in [os.environ.get("MINER_CONFIG", ""), "settings.json"]:
+                if candidate and os.path.isfile(candidate):
+                    self._settings_path = candidate
+                    try:
+                        self._settings_mtime = os.path.getmtime(candidate)
+                    except OSError:
+                        pass
+                    break
+            if not self._settings_path:
+                return
+
+        try:
+            mtime = os.path.getmtime(self._settings_path)
+        except OSError:
+            return
+
+        if mtime <= self._settings_mtime:
+            return
+
+        self._settings_mtime = mtime
+        logger.info(
+            f"settings.json changed on disk — reloading mutable settings",
+            extra={"emoji": ":arrows_counterclockwise:"},
+        )
+
+        try:
+            import json
+            with open(self._settings_path, "r", encoding="utf-8") as fh:
+                cfg = json.load(fh)
+        except Exception as e:
+            logger.warning(f"Failed to parse settings.json: {e}")
+            return
+
+        # Rebuild global streamer_settings
+        try:
+            from settings_loader import _build_streamer_settings
+            new_ss = _build_streamer_settings(cfg.get("streamer_settings"))
+            if new_ss:
+                new_ss.default()
+                new_ss.bet.default()
+                old = Settings.streamer_settings
+                changes = []
+                if str(new_ss.bet.strategy) != str(old.bet.strategy):
+                    changes.append(f"strategy: {old.bet.strategy}→{new_ss.bet.strategy}")
+                if new_ss.bet.percentage != old.bet.percentage:
+                    changes.append(f"percentage: {old.bet.percentage}→{new_ss.bet.percentage}")
+                if new_ss.bet.max_points != old.bet.max_points:
+                    changes.append(f"max_points: {old.bet.max_points}→{new_ss.bet.max_points}")
+                Settings.streamer_settings = new_ss
+                if changes:
+                    logger.info(
+                        f"Updated global settings: {', '.join(changes)}",
+                        extra={"emoji": ":gear:"},
+                    )
+                else:
+                    logger.info("Settings reloaded (no changes detected)", extra={"emoji": ":gear:"})
+        except Exception as e:
+            logger.warning(f"Failed to reload streamer_settings: {e}")
 
     def mine(
         self,
@@ -389,8 +461,18 @@ class TwitchChannelPointsMiner:
                     )
 
             refresh_context = time.time()
+            last_settings_check = time.time()
             while self.running:
                 time.sleep(random.uniform(20, 60))
+
+                # Hot-reload settings.json every ~60s
+                if (time.time() - last_settings_check) >= 60:
+                    last_settings_check = time.time()
+                    try:
+                        self._check_settings_reload()
+                    except Exception:
+                        logger.debug("Settings reload check failed", exc_info=True)
+
                 # Do an external control for WebSocket. Check if the thread is running
                 # Check if is not None because maybe we have already created a new connection on array+1 and now index is None
                 for index in range(0, len(self.ws_pool.ws)):

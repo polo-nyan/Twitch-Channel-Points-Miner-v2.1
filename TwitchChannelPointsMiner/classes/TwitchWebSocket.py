@@ -34,6 +34,7 @@ class TwitchWebSocket(WebSocketApp):
 
         self.last_pong = time.time()
         self.last_ping = time.time()
+        self.reconnect_attempts = 0
 
     # def close(self):
     #     self.forced_close = True

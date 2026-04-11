@@ -142,6 +142,7 @@ cython_debug/
 
 # Custom files
 run.py
+settings.json
 chromedriver*
 
 # Folders
@@ -155,3 +156,6 @@ analytics/*
 keep_replit_alive.py
 .replit
 replit.nix
+data/
+.playwright-mcp/
+test-docker-compose.yml
