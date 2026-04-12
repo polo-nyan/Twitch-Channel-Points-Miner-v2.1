@@ -2478,7 +2478,7 @@ class AnalyticsServer(Thread):
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: int = 5000,
+        port: int = 5005,
         refresh: int = 5,
         days_ago: int = 7,
         username: str = None

@@ -17,7 +17,7 @@ os.environ.setdefault("WERKZEUG_RUN_MAIN", "false")
 
 from flask import Flask, Response, request
 
-_SETUP_PORT = int(os.environ.get("SETUP_PORT", os.environ.get("ANALYTICS_PORT", "5000")))
+_SETUP_PORT = int(os.environ.get("SETUP_PORT", os.environ.get("ANALYTICS_PORT", "5005")))
 
 _HTML = """<!DOCTYPE html>
 <html lang="en">

@@ -272,7 +272,7 @@ def build_analytics_kwargs(cfg):
         return None
     return dict(
         host=acfg.get("host", "127.0.0.1"),
-        port=acfg.get("port", 5000),
+        port=acfg.get("port", 5005),
         refresh=acfg.get("refresh", 5),
         days_ago=acfg.get("days_ago", 7),
     )

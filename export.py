@@ -247,7 +247,7 @@ def export(cfg, output_path="run.py"):
         analytics_line = (
             f"twitch_miner.analytics("
             f"host=\"{acfg.get('host', '127.0.0.1')}\", "
-            f"port={acfg.get('port', 5000)}, "
+            f"port={acfg.get('port', 5005)}, "
             f"refresh={acfg.get('refresh', 5)}, "
             f"days_ago={acfg.get('days_ago', 7)})"
         )

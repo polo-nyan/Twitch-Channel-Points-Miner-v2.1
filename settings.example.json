@@ -75,7 +75,7 @@
     "analytics": {
         "enabled": false,
         "host": "127.0.0.1",
-        "port": 5000,
+        "port": 5005,
         "refresh": 5,
         "days_ago": 7
     },
