@@ -29,6 +29,7 @@ COPY ./TwitchChannelPointsMiner ./TwitchChannelPointsMiner
 COPY ./settings_loader.py ./settings_loader.py
 COPY ./runpy_converter.py ./runpy_converter.py
 COPY ./main.py ./main.py
+COPY ./setup_wizard.py ./setup_wizard.py
 COPY ./export.py ./export.py
 COPY ./assets ./assets
 

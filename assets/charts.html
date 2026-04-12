@@ -103,6 +103,37 @@
                     <pre id="log-content">Set save=True in logger_settings to enable log viewing.&#10;</pre>
                 </div>
 
+                <!-- Discord Controls (always visible) -->
+                <div class="card" id="discord-controls-card" style="padding:0.6rem 0.75rem;">
+                    <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; font-size:0.85rem; margin-bottom:0.3rem;">
+                        <strong style="color:#9da2b8;"><i class="fab fa-discord"></i> Discord:</strong>
+                        <span id="discord-status-badge" title="Checking…">⏳</span>
+                        <button class="btn btn-sm" onclick="sendDiscordSummary()" title="Send summary embeds to Discord">📊 Send Summary</button>
+                        <button class="btn btn-sm" onclick="sendChannelLog()" title="Send channel event logbook to Discord">📖 Channel Log</button>
+                        <button class="btn btn-sm" onclick="runDiscordCleanup()" title="Clean up old messages and repost as organized embeds (backs up to DB first)">🧹 Cleanup &amp; Organize</button>
+                        <button class="btn btn-sm" onclick="runDiscordPurge()" title="Delete ALL channel messages and rebuild one logbook per streamer (requires bot_token + channel_id)">🔥 Purge &amp; Rebuild</button>
+                        <button class="btn btn-sm" id="mute-panel-toggle" onclick="toggleMutePanel()" title="Configure mute settings">🔕 Mutes</button>
+                    </div>
+                    <!-- Mute Panel -->
+                    <div id="discord-mute-panel" style="display:none; padding:0.6rem 0.75rem; border:1px solid rgba(255,255,255,0.1); border-radius:6px; margin-top:0.25rem;">
+                        <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">Channel Mute</div>
+                        <div style="font-size:0.8rem; margin-bottom:0.6rem;">
+                            <label id="channel-mute-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                <input type="checkbox" id="channel-mute-checkbox" onchange="toggleChannelMute(this)" disabled>
+                                <span id="channel-mute-name" style="color:#9da2b8;">Select a streamer first</span>
+                            </label>
+                        </div>
+                        <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">Global Event Mutes</div>
+                        <div id="global-event-mutes" style="display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.6rem;"></div>
+                        <div id="channel-event-mutes-section" style="display:none;">
+                            <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">
+                                Channel Event Mutes — <span id="channel-event-mutes-chan" style="color:#cba6f7;"></span>
+                            </div>
+                            <div id="channel-event-mutes" style="display:flex; flex-wrap:wrap; gap:0.3rem;"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="card" id="dry-run-box" style="display:none; padding:0.75rem;">
                     <div class="card-title"><i class="fas fa-flask"></i> Strategy Comparison (Dry Run)</div>
                     <div id="dry-run-summary">
@@ -125,37 +156,6 @@
                             </label>
                             <button class="btn btn-sm" onclick="saveAutoAdjust()">Save</button>
                             <span id="aa-status" style="color:#36b535; display:none;"></span>
-                        </div>
-                    </div>
-
-                    <!-- Discord Controls -->
-                    <div style="margin-top:0.75rem; padding:0.75rem; border-top:1px solid rgba(255,255,255,0.1);">
-                        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; font-size:0.85rem; margin-bottom:0.4rem;">
-                            <strong style="color:#9da2b8;"><i class="fab fa-discord"></i> Discord:</strong>
-                            <span id="discord-status-badge" title="Checking…">⏳</span>
-                            <button class="btn btn-sm" onclick="sendDiscordSummary()" title="Send summary embeds to Discord">📊 Send Summary</button>
-                            <button class="btn btn-sm" onclick="sendChannelLog()" title="Send channel event logbook to Discord">📖 Channel Log</button>
-                            <button class="btn btn-sm" onclick="runDiscordCleanup()" title="Clean up old messages and repost as organized embeds (backs up to DB first)">🧹 Cleanup &amp; Organize</button>
-                            <button class="btn btn-sm" onclick="runDiscordPurge()" title="Delete ALL channel messages and rebuild one logbook per streamer (requires bot_token + channel_id)">🔥 Purge &amp; Rebuild</button>
-                            <button class="btn btn-sm" id="mute-panel-toggle" onclick="toggleMutePanel()" title="Configure mute settings">🔕 Mutes</button>
-                        </div>
-                        <!-- Mute Panel -->
-                        <div id="discord-mute-panel" style="display:none; padding:0.6rem 0.75rem; border:1px solid rgba(255,255,255,0.1); border-radius:6px; margin-top:0.25rem;">
-                            <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">Channel Mute</div>
-                            <div style="font-size:0.8rem; margin-bottom:0.6rem;">
-                                <label id="channel-mute-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-                                    <input type="checkbox" id="channel-mute-checkbox" onchange="toggleChannelMute(this)" disabled>
-                                    <span id="channel-mute-name" style="color:#9da2b8;">Select a streamer first</span>
-                                </label>
-                            </div>
-                            <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">Global Event Mutes</div>
-                            <div id="global-event-mutes" style="display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.6rem;"></div>
-                            <div id="channel-event-mutes-section" style="display:none;">
-                                <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">
-                                    Channel Event Mutes — <span id="channel-event-mutes-chan" style="color:#cba6f7;"></span>
-                                </div>
-                                <div id="channel-event-mutes" style="display:flex; flex-wrap:wrap; gap:0.3rem;"></div>
-                            </div>
                         </div>
                     </div>
 

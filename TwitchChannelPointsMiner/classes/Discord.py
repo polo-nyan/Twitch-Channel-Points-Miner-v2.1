@@ -105,6 +105,25 @@ _POINTS_GAIN_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Compact session-digest parsers
+_SESSION_BET_RESULT_RE = re.compile(
+    r"title=(.+?)\)\s*-\s*Decision:\s*\d+:\s*(.+?)\s*\([A-Z_]+\)"
+    r"\s*-\s*Result:\s*(\w+)(?:,\s*Gained:\s*([+-][\d.,]+[kKMBT]?))?",
+    re.IGNORECASE,
+)
+_SESSION_BET_START_RE = re.compile(
+    r"Place the bet after:\s*[\d.]+s\s+for:.*?title=(.+?)\)",
+    re.IGNORECASE,
+)
+_SESSION_GOING_TO_BET_RE = re.compile(
+    r"Going to complete bet for.*?title=(.+?)\)",
+    re.IGNORECASE,
+)
+_SESSION_PLACE_BET_RE = re.compile(
+    r"Place\s+([\d.,]+[kKMBT]?)\s+channel points on:\s+([^,]{1,40})",
+    re.IGNORECASE,
+)
+
 
 def parse_legacy_message(text: str) -> dict | None:
     """Parse an old plain-text Discord message into structured data.
@@ -235,11 +254,73 @@ class Discord(object):
         return embed
 
     def _format_session_line(self, event_str: str, message: str) -> str:
-        """Format one event as a compact timestamped log line."""
+        """Format one event as a compact timestamped log line for the session digest."""
         icon = EVENT_ICONS.get(event_str, "\U0001f4cb")
         now = datetime.now().strftime("%H:%M")
+        msg = message.strip()
+
+        # Prediction result: WIN / LOSE / REFUND
+        m = _SESSION_BET_RESULT_RE.search(msg)
+        if m:
+            title = m.group(1).strip()[:38]
+            result = m.group(3).upper()
+            gained = m.group(4) or ""
+            sym = "\u2705" if result == "WIN" else ("\u274c" if result == "LOSE" else "\U0001f504")
+            body = f"{sym} {gained} \u2014 {title}" if gained else f"{sym} {result} \u2014 {title}"
+            return f"`{now}` {icon} {body}"
+
+        # BET_START: "Place the bet after: Xs for: EventPrediction(..., title=TITLE)"
+        m = _SESSION_BET_START_RE.search(msg)
+        if m:
+            title = m.group(1).strip()[:48]
+            return f"`{now}` {icon} Predicting: {title}"
+
+        # BET_GENERAL "Going to complete bet for EventPrediction(...)"
+        m = _SESSION_GOING_TO_BET_RE.search(msg)
+        if m:
+            title = m.group(1).strip()[:48]
+            return f"`{now}` {icon} Predicting: {title}"
+
+        # BET_GENERAL "Place N channel points on: CHOICE"
+        m = _SESSION_PLACE_BET_RE.search(msg)
+        if m:
+            amount = m.group(1)
+            choice = m.group(2).strip()
+            return f"`{now}` {icon} {amount} pts \u2192 {choice}"
+
+        # Points gained (GAIN_FOR_CLAIM, GAIN_FOR_WATCH, etc.)
+        m = _POINTS_GAIN_RE.search(msg)
+        if m:
+            amount = m.group(1)
+            reason = m.group(3).upper()
+            return f"`{now}` {icon} +{amount} pts ({reason})"
+
+        # Raid
+        m = _RAID_RE.search(msg)
+        if m:
+            return f"`{now}` {icon} Raid \u2192 {m.group(2)}"
+
+        # Stream status
+        if event_str == "STREAMER_ONLINE":
+            return f"`{now}` {icon} Stream Online"
+        if event_str == "STREAMER_OFFLINE":
+            return f"`{now}` {icon} Stream Offline"
+
+        # Bonus / Moment claim
+        if event_str == "BONUS_CLAIM":
+            return f"`{now}` {icon} Bonus claimed"
+        if event_str == "MOMENT_CLAIM":
+            return f"`{now}` {icon} Moment claimed"
+
+        # BET_DRY_RUN: multi-line — show title
+        if event_str == "BET_DRY_RUN":
+            m = re.search(r'for\s+"(.+?)"', msg, re.IGNORECASE)
+            if m:
+                return f"`{now}` {icon} Dry run: {m.group(1)[:42]}"
+
+        # Default fallback: first non-empty line, truncated
         first = next(
-            (ln.strip() for ln in message.strip().splitlines() if ln.strip()),
+            (ln.strip() for ln in msg.splitlines() if ln.strip()),
             event_str.replace("_", " ").title(),
         )
         if len(first) > 72:

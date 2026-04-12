@@ -89,12 +89,11 @@ def main():
         _run_from_runpy("run.py")
         return
 
-    # 4. Nothing found
-    print("[main] No configuration found.")
-    print("[main] Provide one of:")
-    print("  - settings.json  (copy settings.example.json and edit)")
-    print("  - run.py         (legacy format, mount or create)")
-    print("  - --config path  (explicit JSON path)")
+    # 4. Nothing found — start the web setup wizard instead of hard-exiting.
+    #    This handles Dokploy / Docker environments where single-file mounts fail.
+    from setup_wizard import run_setup_wizard
+    run_setup_wizard()
+    # run_setup_wizard() only returns if Flask exits unexpectedly (e.g. port in use)
     sys.exit(1)
 
 
