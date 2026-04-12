@@ -5,9 +5,11 @@ main.py  –  Auto-eval entrypoint for the Twitch Channel Points Miner fork.
 
 Resolution order:
   1. If --config / MINER_CONFIG points to a valid JSON → use settings_loader
-  2. If settings.json exists in cwd → use settings_loader
-  3. If run.py exists in cwd → convert it to settings.json via AST parser (no exec)
-  4. Otherwise → error with instructions
+  2. settings/settings.json (persistent volume) → use settings_loader
+  3. settings.json in cwd (legacy bind-mount) → use settings_loader
+  4. settings/run.py (persistent volume) → convert via AST parser
+  5. run.py in cwd (legacy bind-mount) → convert via AST parser
+  6. Otherwise → launch web setup wizard
 
 Usage:
     python main.py                       # auto-detect settings.json or run.py
@@ -48,17 +50,19 @@ def _run_from_json(config_path):
 
 def _run_from_runpy(run_path):
     """Convert a legacy run.py to settings.json via AST (no exec) and run from that."""
-    print(f"[main] No settings.json found. Converting {run_path} → settings.json via AST parser (safe, no code execution).")
+    print(f"[main] No settings.json found. Converting {run_path} → settings/settings.json via AST parser (safe, no code execution).")
     from runpy_converter import convert_file
+    os.makedirs("settings", exist_ok=True)
+    out_json = "settings/settings.json"
     try:
-        cfg = convert_file(run_path, "settings.json")
+        cfg = convert_file(run_path, out_json)
     except SyntaxError as exc:
         print(f"[main] Failed to parse {run_path}: {exc}")
         sys.exit(1)
-    print(f"[main] Generated settings.json for user '{cfg.get('username', '?')}' "
+    print(f"[main] Generated {out_json} for user '{cfg.get('username', '?')}' "
           f"(followers={cfg.get('followers', False)}, streamers={len(cfg.get('streamers', []))})")
     print("[main] Note: password removed from config — auth uses cookies from cookies/ directory.")
-    _run_from_json("settings.json")
+    _run_from_json(out_json)
 
 
 def main():
@@ -79,12 +83,22 @@ def main():
             print(f"[main] Config file not found: {args.config}")
             sys.exit(1)
 
-    # 2. settings.json in cwd
+    # 2. settings/settings.json (persistent volume subdir)
+    if os.path.isfile("settings/settings.json"):
+        _run_from_json("settings/settings.json")
+        return
+
+    # 3. settings.json in cwd (legacy / bind-mount)
     if os.path.isfile("settings.json"):
         _run_from_json("settings.json")
         return
 
-    # 3. Fallback to run.py (mounted from original project)
+    # 4. settings/run.py (persistent volume subdir)
+    if os.path.isfile("settings/run.py"):
+        _run_from_runpy("settings/run.py")
+        return
+
+    # 5. Fallback to run.py in cwd (mounted from original project)
     if os.path.isfile("run.py"):
         _run_from_runpy("run.py")
         return

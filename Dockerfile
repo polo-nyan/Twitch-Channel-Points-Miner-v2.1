@@ -33,9 +33,11 @@ COPY ./setup_wizard.py ./setup_wizard.py
 COPY ./export.py ./export.py
 COPY ./assets ./assets
 
+RUN mkdir -p /usr/src/app/settings
+
 EXPOSE 5005
 
 HEALTHCHECK --interval=60s --timeout=5s --retries=3 --start-period=30s \
-  CMD python -c "import json,os,urllib.request; p=json.load(open('settings.json')).get('analytics',{}).get('port',5005) if os.path.exists('settings.json') else 5005; urllib.request.urlopen(f'http://localhost:{p}/health')" || exit 1
+  CMD python -c "import json,os,urllib.request; cfg=next((p for p in ['settings/settings.json','settings.json'] if os.path.exists(p)),None); port=json.load(open(cfg)).get('analytics',{}).get('port',5005) if cfg else 5005; urllib.request.urlopen(f'http://localhost:{port}/health')" || exit 1
 
 ENTRYPOINT [ "python", "main.py" ]

@@ -165,11 +165,13 @@ def run_setup_wizard():
                     json.loads(content)
                 except json.JSONDecodeError as e:
                     return {"ok": False, "error": f"Invalid JSON: {e}"}
-                dest = "settings.json"
+                os.makedirs("settings", exist_ok=True)
+                dest = "settings/settings.json"
                 with open(dest, "w", encoding="utf-8") as fh:
                     fh.write(content)
             elif mode == "runpy":
-                dest = "run.py"
+                os.makedirs("settings", exist_ok=True)
+                dest = "settings/run.py"
                 with open(dest, "w", encoding="utf-8") as fh:
                     fh.write(content)
             else:
