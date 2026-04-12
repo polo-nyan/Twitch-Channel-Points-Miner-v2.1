@@ -18,8 +18,8 @@ services:
       - data/analytics:/usr/src/app/analytics
       - data/cookies:/usr/src/app/cookies
       - data/logs:/usr/src/app/logs
-      - ./settings.json:/usr/src/app/settings.json
-      - ./run.py:/usr/src/app/run.py:ro
+      - data/settings.json:/usr/src/app/settings.json
+      - data/run.py:/usr/src/app/run.py:ro
 
     ports:
       - '5005:5005'
