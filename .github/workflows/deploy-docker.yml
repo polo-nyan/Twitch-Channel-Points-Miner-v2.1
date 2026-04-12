@@ -31,7 +31,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: rdavidoff/twitch-channel-points-miner-v2
+          images: polo-nyan/Twitch-Channel-Points-Miner-v2.1
           tags: |
             type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags') }}
             type=raw,value=latest
