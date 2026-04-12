@@ -641,7 +641,7 @@ function sendDiscordSummary() {
         url: './api/discord/summary',
         method: 'POST',
         success: function (resp) {
-            alert('Sent ' + (resp.sent || 0) + ' embed(s) for ' + (resp.streamers || 0) + ' streamer(s).');
+            alert('Sent ' + (resp.embeds || 1) + ' embed(s) for ' + (resp.streamers || 0) + ' streamer(s).');
         },
         error: function (xhr) {
             var err = 'Failed';
@@ -664,8 +664,8 @@ function sendChannelLog() {
         method: 'POST',
         success: function (resp) {
             var sent = resp.sent || 0;
-            var days = resp.days || 0;
-            alert('Sent ' + sent + ' embed(s) covering ' + days + ' day(s) of events.');
+            var total = resp.total_events || 0;
+            alert('Sent ' + sent + ' embed(s) covering ' + total + ' event(s).');
         },
         error: function (xhr) {
             var err = 'Failed';

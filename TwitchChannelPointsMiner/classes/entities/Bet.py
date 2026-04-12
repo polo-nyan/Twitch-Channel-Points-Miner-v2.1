@@ -20,6 +20,11 @@ class Strategy(Enum):
     VALUE_BET = auto()
     WEIGHTED_AVERAGE = auto()
     UNDERDOG = auto()
+    EXPECTED_VALUE = auto()
+    ANTI_WHALE = auto()
+    ENSEMBLE = auto()
+    ADAPTIVE = auto()
+    SMART_KELLY = auto()
     NUMBER_1 = auto()
     NUMBER_2 = auto()
     NUMBER_3 = auto()
@@ -140,6 +145,9 @@ class BetSettings(object):
         "delay",
         "delay_mode",
         "historical_outcomes",
+        "confidence_threshold",
+        "kelly_fraction",
+        "min_ev",
     ]
 
     def __init__(
@@ -154,6 +162,9 @@ class BetSettings(object):
         delay: float = None,
         delay_mode: DelayMode = None,
         historical_outcomes: list = None,
+        confidence_threshold: float = None,
+        kelly_fraction: float = None,
+        min_ev: float = None,
     ):
         self.strategy = strategy
         self.percentage = percentage
@@ -165,6 +176,9 @@ class BetSettings(object):
         self.delay = delay
         self.delay_mode = delay_mode
         self.historical_outcomes = historical_outcomes if historical_outcomes is not None else []
+        self.confidence_threshold = confidence_threshold
+        self.kelly_fraction = kelly_fraction
+        self.min_ev = min_ev
 
     def default(self):
         self.strategy = self.strategy if self.strategy is not None else Strategy.SMART
@@ -185,6 +199,9 @@ class BetSettings(object):
         )
         if self.historical_outcomes is None:
             self.historical_outcomes = []
+        self.confidence_threshold = self.confidence_threshold if self.confidence_threshold is not None else 0.0
+        self.kelly_fraction = self.kelly_fraction if self.kelly_fraction is not None else 1.0
+        self.min_ev = self.min_ev if self.min_ev is not None else 0.0
 
     def __repr__(self):
         return f"BetSettings(strategy={self.strategy}, percentage={self.percentage}, percentage_gap={self.percentage_gap}, max_points={self.max_points}, minimum_points={self.minimum_points}, stealth_mode={self.stealth_mode})"
@@ -503,6 +520,99 @@ class Bet(object):
                 best = i
         return best
 
+    def __expected_value_choice(self) -> int:
+        """Expected Value: choose the outcome with the highest positive expected
+        value.  EV = (voter_probability * payout_odds) - 1, where
+        voter_probability is the fraction of users who chose each outcome and
+        payout_odds is the total-points multiplier.  The best EV is stored in
+        self.decision["ev"] so callers can apply a min_ev threshold."""
+        best = 0
+        best_ev = float("-inf")
+        for i in range(len(self.outcomes)):
+            odds = self.outcomes[i].get(OutcomeKeys.ODDS, 1.0)
+            p = self.outcomes[i].get(OutcomeKeys.PERCENTAGE_USERS, 50.0) / 100.0
+            ev = (p * odds) - 1.0
+            if ev > best_ev:
+                best_ev = ev
+                best = i
+        self.decision["ev"] = round(best_ev, 4)
+        return best
+
+    def __anti_whale_choice(self) -> int:
+        """Anti-Whale: deprioritise outcomes dominated by a single large bettor
+        (top predictor holds > 25% of that outcome's total points).  A base
+        score of (voter_pct + odds_pct) / 200 is reduced by the whale ratio
+        when it exceeds the threshold.  Falls back gracefully on outcomes with
+        no top-predictor data."""
+        WHALE_THRESHOLD = 0.25
+        num = len(self.outcomes)
+        scores = []
+        for i in range(num):
+            total = self.outcomes[i].get(OutcomeKeys.TOTAL_POINTS, 0)
+            top = self.outcomes[i].get(OutcomeKeys.TOP_POINTS, 0)
+            whale_ratio = (top / total) if total > 0 else 0.0
+            penalty = whale_ratio if whale_ratio > WHALE_THRESHOLD else 0.0
+            user_pct = self.outcomes[i].get(OutcomeKeys.PERCENTAGE_USERS, 0)
+            odds_pct = self.outcomes[i].get(OutcomeKeys.ODDS_PERCENTAGE, 0)
+            base = (user_pct + odds_pct) / 200.0
+            scores.append(base - penalty)
+        best = 0
+        for i in range(1, num):
+            if scores[i] > scores[best]:
+                best = i
+        return best
+
+    def __ensemble_choice(self) -> int:
+        """Ensemble: run five independent sub-strategies (MOST_VOTED, HIGH_ODDS,
+        SMART_MONEY, MOMENTUM, VALUE_BET) and take a majority vote.  Ties are
+        broken by total_users on the tied outcomes.  Vote tallies are stored in
+        self.decision["ensemble_votes"] for transparency."""
+        sub_choices = [
+            self.__return_choice(OutcomeKeys.TOTAL_USERS),   # MOST_VOTED
+            self.__return_choice(OutcomeKeys.ODDS),           # HIGH_ODDS
+            self.__return_choice(OutcomeKeys.TOP_POINTS),     # SMART_MONEY
+            self.__momentum_choice(),                         # MOMENTUM
+            self.__value_bet_choice(),                        # VALUE_BET
+        ]
+        votes = [0] * len(self.outcomes)
+        for c in sub_choices:
+            if 0 <= c < len(votes):
+                votes[c] += 1
+        self.decision["ensemble_votes"] = list(votes)
+        best = 0
+        for i in range(1, len(votes)):
+            if votes[i] > votes[best] or (
+                votes[i] == votes[best]
+                and self.outcomes[i].get(OutcomeKeys.TOTAL_USERS, 0)
+                > self.outcomes[best].get(OutcomeKeys.TOTAL_USERS, 0)
+            ):
+                best = i
+        return best
+
+    def __adaptive_choice(self) -> int:
+        """Adaptive: automatically selects a sub-strategy based on the total
+        betting pool size, assuming that different market sizes favour different
+        information signals.
+
+        - Small  pool (< 5,000 pts):  MOST_VOTED — thin markets, crowd wisdom
+        - Medium pool (5k–100k pts):  SMART — balanced voter + odds logic
+        - Large  pool (> 100k pts):   MOMENTUM — informed-money signal reliable
+        """
+        if self.total_points < 5_000:
+            return self.__return_choice(OutcomeKeys.TOTAL_USERS)
+        elif self.total_points < 100_000:
+            difference = abs(
+                self.outcomes[0][OutcomeKeys.PERCENTAGE_USERS]
+                - self.outcomes[1][OutcomeKeys.PERCENTAGE_USERS]
+            )
+            return (
+                self.__return_choice(OutcomeKeys.ODDS)
+                if difference < self.settings.percentage_gap
+                else self.__return_choice(OutcomeKeys.TOTAL_USERS)
+            )
+        else:
+            return self.__momentum_choice()
+
     def skip(self) -> tuple:
         if self.settings.filter_condition is not None:
             # key == by , condition == where
@@ -578,6 +688,8 @@ class Bet(object):
             )
         elif self.settings.strategy == Strategy.HISTORICAL:
             self.decision["choice"] = self.__historical_choice()
+            if self.settings.confidence_threshold > 0.0 and self.decision.get("confidence", 0.0) < self.settings.confidence_threshold:
+                self.decision["choice"] = None
         elif self.settings.strategy == Strategy.KELLY_CRITERION:
             self.decision["choice"] = self.__kelly_choice()
         elif self.settings.strategy == Strategy.CONTRARIAN:
@@ -590,14 +702,47 @@ class Bet(object):
             self.decision["choice"] = self.__weighted_average_choice()
         elif self.settings.strategy == Strategy.UNDERDOG:
             self.decision["choice"] = self.__underdog_choice()
+        elif self.settings.strategy == Strategy.EXPECTED_VALUE:
+            self.decision["choice"] = self.__expected_value_choice()
+            if self.settings.min_ev > 0.0 and self.decision.get("ev", float("-inf")) < self.settings.min_ev:
+                self.decision["choice"] = None
+        elif self.settings.strategy == Strategy.ANTI_WHALE:
+            self.decision["choice"] = self.__anti_whale_choice()
+        elif self.settings.strategy == Strategy.ENSEMBLE:
+            self.decision["choice"] = self.__ensemble_choice()
+        elif self.settings.strategy == Strategy.ADAPTIVE:
+            self.decision["choice"] = self.__adaptive_choice()
+        elif self.settings.strategy == Strategy.SMART_KELLY:
+            difference = abs(
+                self.outcomes[0][OutcomeKeys.PERCENTAGE_USERS]
+                - self.outcomes[1][OutcomeKeys.PERCENTAGE_USERS]
+            )
+            self.decision["choice"] = (
+                self.__return_choice(OutcomeKeys.ODDS)
+                if difference < self.settings.percentage_gap
+                else self.__return_choice(OutcomeKeys.TOTAL_USERS)
+            )
 
         if self.decision["choice"] is not None:
             index = self.decision["choice"]
             self.decision["id"] = self.outcomes[index]["id"]
-            self.decision["amount"] = min(
-                int(balance * (self.settings.percentage / 100)),
-                self.settings.max_points,
-            )
+            # Kelly-based sizing for KELLY_CRITERION and SMART_KELLY
+            if self.settings.strategy in (Strategy.KELLY_CRITERION, Strategy.SMART_KELLY):
+                odds = self.outcomes[index].get(OutcomeKeys.ODDS, 1.0)
+                b = max(odds - 1.0, 0.01)
+                p = self.outcomes[index].get(OutcomeKeys.PERCENTAGE_USERS, 50.0) / 100.0
+                q = 1.0 - p
+                kelly_f = max(0.0, (b * p - q) / b)
+                fraction = self.settings.kelly_fraction or 1.0
+                self.decision["amount"] = min(
+                    int(balance * kelly_f * fraction),
+                    self.settings.max_points,
+                )
+            else:
+                self.decision["amount"] = min(
+                    int(balance * (self.settings.percentage / 100)),
+                    self.settings.max_points,
+                )
             if (
                 self.settings.stealth_mode is True
                 and self.decision["amount"]

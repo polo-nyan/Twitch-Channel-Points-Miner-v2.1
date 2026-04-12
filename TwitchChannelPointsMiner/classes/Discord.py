@@ -88,8 +88,8 @@ EVENT_CATEGORIES = {
 
 # Regex patterns for parsing old plain-text Discord messages into structured data
 _PREDICTION_RESULT_RE = re.compile(
-    r"EventPrediction\(event_id=([a-f0-9-]+).*?streamer=Streamer\(username=(\w+).*?channel_points=([\d.]+k?).*?title=(.+?)\)"
-    r"\s*-\s*Decision:\s*(\d+):\s*(.+?)\s*\((\w+)\)\s*-\s*Result:\s*(\w+),\s*Gained:\s*([+-][\d.]+k?)",
+    r"EventPrediction\(event_id=([a-f0-9-]+).*?streamer=Streamer\(username=(\w+).*?channel_points=([\d.]+[kKMBT]?).*?title=(.+?)\)"
+    r"\s*-\s*Decision:\s*(\d+):\s*(.+?)\s*\((\w+)\)\s*-\s*Result:\s*(\w+),\s*Gained:\s*([+-][\d.,]+[kKMBT]?)",
     re.IGNORECASE,
 )
 _PLACE_BET_RE = re.compile(
@@ -312,6 +312,14 @@ class Discord(object):
         if event_str == "MOMENT_CLAIM":
             return f"`{now}` {icon} Moment claimed"
 
+        # BET_FILTERS: skip decision
+        if event_str == "BET_FILTERS":
+            return f"`{now}` {icon} Bet skipped (filter)"
+
+        # BET_FAILED
+        if event_str == "BET_FAILED":
+            return f"`{now}` {icon} Bet failed"
+
         # BET_DRY_RUN: multi-line — show title
         if event_str == "BET_DRY_RUN":
             m = re.search(r'for\s+"(.+?)"', msg, re.IGNORECASE)
@@ -338,7 +346,7 @@ class Discord(object):
             while lines and len("\n".join(lines)) > 3900:
                 lines = lines[1:]
             description = "\n".join(lines) if lines else "*…*"
-        now_str = datetime.utcnow().strftime("%d %b %H:%M UTC")
+        now_str = datetime.now(timezone.utc).strftime("%d %b %H:%M UTC")
         embed = {
             "title": f"\U0001f4fa {channel or 'Twitch'} \u2014 Live Activity",
             "description": description,
@@ -375,35 +383,56 @@ class Discord(object):
         chan_key = (channel or "_global").lower()
         state_path = self._get_session_state_path()
 
-        # STREAMER_ONLINE: start a fresh session — clear cache, abandon old message, inject delimiter
+        # STREAMER_ONLINE: start a fresh session — delete old embed, clear cache, inject delimiter only
         if event_str == "STREAMER_ONLINE":
-            self._session_cache[chan_key] = []
+            # Delete the previous session's Discord message so it doesn't orphan in the channel
             if state_path and os.path.isfile(state_path):
                 try:
                     with open(state_path, "r", encoding="utf-8") as _fh:
                         _st = json.load(_fh)
+                    old_msg_id = _st.get(chan_key)
+                    if old_msg_id:
+                        self.delete_message(old_msg_id)
                     if chan_key in _st:
                         _st.pop(chan_key)
                         with open(state_path, "w", encoding="utf-8") as _fh:
                             json.dump(_st, _fh, indent=2)
                 except Exception:
                     pass
-            # Session start delimiter
+            # Reset cache with delimiter only (no redundant "Stream Online" line)
             now_hhmm = datetime.now().strftime("%H:%M")
             self._session_cache[chan_key] = [f"\u2500\u2500\u2500 \U0001f7e2 Session started {now_hhmm} \u2500\u2500\u2500"]
+            # Skip appending the generic _format_session_line for ONLINE — delimiter is enough
+            self._session_cache[chan_key] = self._session_cache[chan_key][-30:]
+            if not state_path:
+                return
+            try:
+                payload = self._build_session_payload(channel, event_str)
+                self.upsert_logbook_embed(chan_key, payload, state_path)
+            except Exception:
+                logger.warning("Failed to send Discord session digest", exc_info=True)
+            return
 
-        # Append formatted line and keep last 15 events
-        line = self._format_session_line(event_str, message)
-        self._session_cache.setdefault(chan_key, []).append(line)
+        # Append formatted line; skip generic OFFLINE line — delimiter below is sufficient
+        if event_str != "STREAMER_OFFLINE":
+            line = self._format_session_line(event_str, message)
+            self._session_cache.setdefault(chan_key, []).append(line)
 
-        # STREAMER_OFFLINE: append a session end marker before capping
+        # STREAMER_OFFLINE: append session end delimiter only
         if event_str == "STREAMER_OFFLINE":
             now_hhmm = datetime.now().strftime("%H:%M")
-            self._session_cache[chan_key].append(
+            self._session_cache.setdefault(chan_key, []).append(
                 f"\u2500\u2500\u2500 \U0001f534 Offline {now_hhmm} \u2500\u2500\u2500"
             )
 
-        self._session_cache[chan_key] = self._session_cache[chan_key][-15:]
+        # Keep last 30 non-startup events; delimiters count but are excluded from the active window
+        # to prevent them being rolled off too quickly.
+        cache = self._session_cache.get(chan_key, [])
+        # Preserve the session-start delimiter at index 0 if present, cap the rest at 30
+        if cache and cache[0].startswith("\u2500\u2500\u2500 \U0001f7e2"):
+            self._session_cache[chan_key] = [cache[0]] + cache[1:][-29:]
+        else:
+            self._session_cache[chan_key] = cache[-30:]
 
         if not state_path:
             return
@@ -598,6 +627,8 @@ class Discord(object):
                             edited = True
                         elif resp.status_code == 429:
                             self._rate_limiter.report_rate_limited()
+                            # Rate-limited — do NOT fall through and create a duplicate
+                            return msg_id
                         elif resp.status_code in (404, 403):
                             # Message gone — fall through to create a new one
                             state.pop(streamer, None)

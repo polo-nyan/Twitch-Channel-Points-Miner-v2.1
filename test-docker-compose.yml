@@ -18,9 +18,8 @@ services:
       - data:/usr/src/app/analytics
       - data:/usr/src/app/cookies
       - logs:/usr/src/app/logs
-      - ./settings.json:/usr/src/app/settings.json:ro
-    ports:
-      - '5005:5005'
+    #ports:
+    #  - '5005:5005'
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5005/health')"]
       interval: 60s

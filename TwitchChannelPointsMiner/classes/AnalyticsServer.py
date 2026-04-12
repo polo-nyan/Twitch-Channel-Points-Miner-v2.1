@@ -1788,26 +1788,9 @@ def discord_summary():
     embed["title"] = "📋 Prediction Summary Report"
     embed["footer"]["text"] = f"📂 Summary • {db_info.get('predictions', 0)} total predictions"
 
-    payload = {
-        "username": "Twitch Channel Points Miner",
-        "avatar_url": AVATAR_URL,
-        "embeds": [embed],
-    }
-
-    sent = 0
-    try:
-        discord._rate_limiter.acquire()
-        resp = requests.post(discord.webhook_api, json=payload, timeout=10)
-        if resp.status_code in (200, 204):
-            discord._rate_limiter.report_success()
-            sent = 1
-        elif resp.status_code == 429:
-            discord._rate_limiter.report_rate_limited()
-    except Exception:
-        logger.warning("Failed to send Discord summary", exc_info=True)
-
-    # Send per-streamer detail embeds (top 5)
-    for sname, st in sorted_streamers[:5]:
+    # Build per-streamer detail embeds (top 9 — up to 10 embeds per message)
+    all_embeds = [embed]
+    for sname, st in sorted_streamers[:9]:
         s_net = st.get("net_points", 0)
         prefix = "+" if s_net >= 0 else ""
         s_desc = (
@@ -1819,25 +1802,28 @@ def discord_summary():
         event_str = "BET_WIN" if s_net >= 0 else "BET_LOSE"
         s_embed = discord._build_embed(s_desc, event_str, sname)
         s_embed["title"] = f"📺 {sname} — Prediction Stats"
+        all_embeds.append(s_embed)
 
-        s_payload = {
-            "username": "Twitch Channel Points Miner",
-            "avatar_url": AVATAR_URL,
-            "embeds": [s_embed],
-        }
-        try:
-            discord._rate_limiter.acquire()
-            resp = requests.post(discord.webhook_api, json=s_payload, timeout=10)
-            if resp.status_code in (200, 204):
-                discord._rate_limiter.report_success()
-                sent += 1
-            elif resp.status_code == 429:
-                discord._rate_limiter.report_rate_limited()
-        except Exception:
-            logger.warning(f"Failed to send Discord embed for {sname}", exc_info=True)
+    payload = {
+        "username": "Twitch Channel Points Miner",
+        "avatar_url": AVATAR_URL,
+        "embeds": all_embeds,
+    }
+
+    sent = 0
+    try:
+        discord._rate_limiter.acquire()
+        resp = requests.post(discord.webhook_api, json=payload, timeout=15)
+        if resp.status_code in (200, 204):
+            discord._rate_limiter.report_success()
+            sent = 1
+        elif resp.status_code == 429:
+            discord._rate_limiter.report_rate_limited()
+    except Exception:
+        logger.warning("Failed to send Discord summary", exc_info=True)
 
     return Response(
-        json.dumps({"sent": sent, "streamers": len(sorted_streamers)}),
+        json.dumps({"sent": sent, "streamers": len(sorted_streamers), "embeds": len(all_embeds)}),
         status=200,
         mimetype="application/json",
     )
@@ -1875,6 +1861,10 @@ def discord_cleanup():
             state_path = os.path.join(Settings.analytics_path, "logbook_state.json")
             if os.path.isfile(state_path):
                 os.remove(state_path)
+            # Also invalidate live-session embed IDs so the next online event creates fresh ones
+            session_state_path = os.path.join(Settings.analytics_path, "session_state.json")
+            if os.path.isfile(session_state_path):
+                os.remove(session_state_path)
 
             sent = 0
             names = []
