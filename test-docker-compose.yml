@@ -18,6 +18,7 @@ services:
       - data:/usr/src/app/analytics
       - data:/usr/src/app/cookies
       - logs:/usr/src/app/logs
+      - ./settings.json:/usr/src/app/settings.json:ro
     ports:
       - '5005:5005'
     healthcheck:
