@@ -158,4 +158,3 @@ keep_replit_alive.py
 replit.nix
 data/
 .playwright-mcp/
-test-docker-compose.yml
