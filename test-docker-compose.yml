@@ -10,11 +10,17 @@ services:
     environment:
       - TERM=xterm-256color
     volumes:
-      - './data/analytics:/usr/src/app/analytics'
-      - './data/cookies:/usr/src/app/cookies'
-      - './data/logs:/usr/src/app/logs'
-      - './settings.json:/usr/src/app/settings.json'
-      - './run.py:/usr/src/app/run.py:ro'
+     # - './data/analytics:/usr/src/app/analytics'
+     # - './data/cookies:/usr/src/app/cookies'
+     # - './data/logs:/usr/src/app/logs'
+     # - './settings.json:/usr/src/app/settings.json'
+     # - './run.py:/usr/src/app/run.py:ro'
+      - data/analytics:/usr/src/app/analytics
+      - data/cookies:/usr/src/app/cookies
+      - data/logs:/usr/src/app/logs
+      - ./settings.json:/usr/src/app/settings.json
+      - ./run.py:/usr/src/app/run.py:ro
+
     ports:
       - '5005:5005'
     healthcheck:
@@ -23,3 +29,5 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+volumes:
+  data:
