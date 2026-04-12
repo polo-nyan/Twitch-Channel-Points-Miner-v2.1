@@ -296,7 +296,7 @@ function getStreamers() {
         renderStreamers();
     });
 
-    // Auto-refresh streamer list every 60 seconds (live status + points)
+    // Auto-refresh streamer list every 10 seconds (live status + points)
     if (!getStreamers._refreshTimer) {
         getStreamers._refreshTimer = setInterval(function () {
             $.getJSON('streamers', function (response) {
@@ -304,7 +304,7 @@ function getStreamers() {
                 sortStreamers();
                 renderStreamers();
             });
-        }, 60000);
+        }, 10000);
     }
 }
 

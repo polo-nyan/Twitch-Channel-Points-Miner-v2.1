@@ -47,6 +47,14 @@ def _check_dangerous_patterns(content: str):
     return None
 
 
+def _resolve_settings_path() -> str:
+    """Return the canonical settings.json path, preferring settings/ subdir."""
+    subdir = os.path.join(Path().absolute(), "settings", "settings.json")
+    if os.path.isfile(subdir):
+        return subdir
+    return os.path.join(Path().absolute(), "settings.json")
+
+
 def streamers_available():
     path = Settings.analytics_path
     return [
@@ -478,9 +486,9 @@ def config_editor_page():
 
 
 def config_read():
-    """Read the current config file. Prefers settings.json, falls back to run.py."""
+    """Read the current config file. Prefers settings/settings.json, then settings.json, falls back to run.py."""
     # Try settings.json first (new format)
-    settings_path = os.path.join(Path().absolute(), "settings.json")
+    settings_path = _resolve_settings_path()
     if os.path.isfile(settings_path):
         try:
             with open(settings_path, "r", encoding="utf-8") as f:
@@ -616,7 +624,7 @@ def config_save():
                 status=400,
                 mimetype="application/json",
             )
-        config_path = os.path.join(Path().absolute(), "settings.json")
+        config_path = _resolve_settings_path()
     else:
         # Python: safety + syntax checks
         danger = _check_dangerous_patterns(content)
@@ -696,7 +704,7 @@ def health():
 def config_export_runpy():
     """Export the current settings.json as an upstream-compatible run.py.
     Returns the generated Python source as a download."""
-    settings_path = os.path.join(Path().absolute(), "settings.json")
+    settings_path = _resolve_settings_path()
     if not os.path.isfile(settings_path):
         return Response(
             json.dumps({"error": "No settings.json found to export."}),
@@ -1258,7 +1266,7 @@ def _get_discord():
         return discord
 
     # Fallback: construct from settings.json
-    settings_path = os.path.join(Path().absolute(), "settings.json")
+    settings_path = _resolve_settings_path()
     if not os.path.isfile(settings_path):
         return None
     try:
@@ -1433,7 +1441,7 @@ def telemetry_summary():
 
 def config_reload():
     """Hot-reload the settings.json configuration at runtime."""
-    settings_path = os.path.join(Path().absolute(), "settings.json")
+    settings_path = _resolve_settings_path()
     if not os.path.isfile(settings_path):
         return Response(
             json.dumps({"success": False, "error": "No settings.json found."}),
@@ -1467,7 +1475,7 @@ def config_reload():
 
 def _read_settings_json():
     """Read settings.json and return (cfg_dict, path) or (None, path)."""
-    settings_path = os.path.join(Path().absolute(), "settings.json")
+    settings_path = _resolve_settings_path()
     if not os.path.isfile(settings_path):
         return None, settings_path
     with open(settings_path, "r", encoding="utf-8") as f:
