@@ -243,7 +243,8 @@ class Twitch(object):
             logger.info(
                 f"Joining raid from {streamer} to {raid.target_login}!",
                 extra={"emoji": ":performing_arts:",
-                       "event": Events.JOIN_RAID},
+                       "event": Events.JOIN_RAID,
+                       "channel": streamer.username},
             )
 
     def viewer_is_mod(self, streamer):
@@ -747,6 +748,7 @@ class Twitch(object):
                 extra={
                     "emoji": ":crystal_ball:",
                     "event": Events.BET_DRY_RUN,
+                    "channel": event.streamer.username,
                 },
             )
         except Exception:
@@ -757,6 +759,7 @@ class Twitch(object):
             extra={
                 "emoji": ":four_leaf_clover:",
                 "event": Events.BET_GENERAL,
+                "channel": event.streamer.username,
             },
         )
         if event.status == "ACTIVE":
@@ -767,6 +770,7 @@ class Twitch(object):
                     extra={
                         "emoji": ":pushpin:",
                         "event": Events.BET_FILTERS,
+                        "channel": event.streamer.username,
                     },
                 )
                 logger.info(
@@ -774,6 +778,7 @@ class Twitch(object):
                     extra={
                         "emoji": ":pushpin:",
                         "event": Events.BET_FILTERS,
+                        "channel": event.streamer.username,
                     },
                 )
             else:
@@ -785,6 +790,7 @@ class Twitch(object):
                         extra={
                             "emoji": ":four_leaf_clover:",
                             "event": Events.BET_GENERAL,
+                            "channel": event.streamer.username,
                         },
                     )
 
@@ -810,6 +816,7 @@ class Twitch(object):
                             extra={
                                 "emoji": ":four_leaf_clover:",
                                 "event": Events.BET_FAILED,
+                                "channel": event.streamer.username,
                             },
                         )
                 else:
@@ -818,6 +825,7 @@ class Twitch(object):
                         extra={
                             "emoji": ":four_leaf_clover:",
                             "event": Events.BET_GENERAL,
+                            "channel": event.streamer.username,
                         },
                     )
         else:
@@ -826,6 +834,7 @@ class Twitch(object):
                 extra={
                     "emoji": ":disappointed_relieved:",
                     "event": Events.BET_FAILED,
+                    "channel": event.streamer.username,
                 },
             )
 
@@ -833,7 +842,7 @@ class Twitch(object):
         if Settings.logger.less is False:
             logger.info(
                 f"Claiming the bonus for {streamer}!",
-                extra={"emoji": ":gift:", "event": Events.BONUS_CLAIM},
+                extra={"emoji": ":gift:", "event": Events.BONUS_CLAIM, "channel": streamer.username},
             )
 
         json_data = copy.deepcopy(GQLOperations.ClaimCommunityPoints)
@@ -848,7 +857,8 @@ class Twitch(object):
             logger.info(
                 f"Claiming the moment for {streamer}!",
                 extra={"emoji": ":video_camera:",
-                       "event": Events.MOMENT_CLAIM},
+                       "event": Events.MOMENT_CLAIM,
+                       "channel": streamer.username},
             )
 
         json_data = copy.deepcopy(GQLOperations.CommunityMomentCallout_Claim)

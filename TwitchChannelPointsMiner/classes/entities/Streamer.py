@@ -5,6 +5,29 @@ import time
 from datetime import datetime
 from threading import Lock
 
+_online_status_lock = Lock()
+
+
+def _write_online_status(analytics_path: str, username: str, is_online: bool):
+    """Atomically update analytics_path/online_status.json for the web UI."""
+    status_file = os.path.join(analytics_path, "online_status.json")
+    temp_file = status_file + ".tmp"
+    with _online_status_lock:
+        try:
+            status = {}
+            if os.path.isfile(status_file):
+                try:
+                    with open(status_file, "r", encoding="utf-8") as f:
+                        status = json.load(f)
+                except Exception:
+                    pass
+            status[username.lower()] = is_online
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(status, f)
+            os.replace(temp_file, status_file)
+        except Exception:
+            pass
+
 from TwitchChannelPointsMiner.classes.Chat import ChatPresence, ThreadChat
 from TwitchChannelPointsMiner.classes.entities.Bet import BetSettings, DelayMode
 from TwitchChannelPointsMiner.classes.entities.Stream import Stream
@@ -128,6 +151,8 @@ class Streamer(object):
         if self.is_online is True:
             self.offline_at = time.time()
             self.is_online = False
+            if Settings.enable_analytics:
+                _write_online_status(Settings.analytics_path, self.username, False)
 
         self.toggle_chat()
 
@@ -136,6 +161,7 @@ class Streamer(object):
             extra={
                 "emoji": ":sleeping:",
                 "event": Events.STREAMER_OFFLINE,
+                "channel": self.username,
             },
         )
 
@@ -144,6 +170,8 @@ class Streamer(object):
             self.online_at = time.time()
             self.is_online = True
             self.stream.init_watch_streak()
+            if Settings.enable_analytics:
+                _write_online_status(Settings.analytics_path, self.username, True)
 
         self.toggle_chat()
 
@@ -152,6 +180,7 @@ class Streamer(object):
             extra={
                 "emoji": ":partying_face:",
                 "event": Events.STREAMER_ONLINE,
+                "channel": self.username,
             },
         )
 

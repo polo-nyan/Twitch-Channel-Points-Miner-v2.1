@@ -320,6 +320,7 @@ class WebSocketsPool:
                                 extra={
                                     "emoji": ":rocket:",
                                     "event": Events.get(f"GAIN_FOR_{reason_code}"),
+                                    "channel": ws.streamers[streamer_index].username,
                                 },
                             )
                             ws.streamers[streamer_index].update_history(
@@ -421,6 +422,7 @@ class WebSocketsPool:
                                             extra={
                                                 "emoji": ":alarm_clock:",
                                                 "event": Events.BET_START,
+                                                "channel": ws.streamers[streamer_index].username,
                                             },
                                         )
                                     else:
@@ -429,6 +431,7 @@ class WebSocketsPool:
                                             extra={
                                                 "emoji": ":pushpin:",
                                                 "event": Events.BET_FILTERS,
+                                                "channel": ws.streamers[streamer_index].username,
                                             },
                                         )
 
@@ -471,6 +474,7 @@ class WebSocketsPool:
                                         "event": Events.get(
                                             f"BET_{event_prediction.result['type']}"
                                         ),
+                                        "channel": ws.streamers[streamer_index].username,
                                     },
                                 )
 

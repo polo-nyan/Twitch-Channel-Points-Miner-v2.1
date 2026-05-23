@@ -119,11 +119,12 @@ def filter_datas(start_date, end_date, datas):
 
         # Attempt to get the last known balance from before the provided timeframe
         df = df[(df.x >= new_start_date) & (df.x <= new_end_date)]
-        last_balance = df.drop(columns="datetime").sort_values(
-            by=["x", "y"], ascending=True).to_dict("records")[-1]['y']
-
-        datas["series"] = [{'x': start_date, 'y': last_balance, 'z': 'No Stream'}, {
-            'x': end_date, 'y': last_balance, 'z': 'No Stream'}]
+        records = df.drop(columns="datetime").sort_values(
+            by=["x", "y"], ascending=True).to_dict("records")
+        if records:
+            last_balance = records[-1]['y']
+            datas["series"] = [{'x': start_date, 'y': last_balance, 'z': 'No Stream'}, {
+                'x': end_date, 'y': last_balance, 'z': 'No Stream'}]
 
     if "annotations" in datas:
         df = pd.DataFrame(datas["annotations"])
@@ -192,8 +193,21 @@ def get_last_activity(streamer):
 
 
 def _get_streamers_online_status() -> dict:
-    """Return {channel_name_lower: bool} indicating live status from telemetry events table.
-    Uses the most-recent STREAMER_ONLINE / STREAMER_OFFLINE event per channel."""
+    """Return {channel_name_lower: bool} indicating live status.
+    Reads from online_status.json written in real-time by the miner,
+    falling back to the telemetry events table for historical data."""
+    # Primary: real-time JSON file written by Streamer.set_online/set_offline
+    status_file = os.path.join(Settings.analytics_path, "online_status.json")
+    if os.path.isfile(status_file):
+        try:
+            with open(status_file, "r", encoding="utf-8") as _f:
+                data = json.load(_f)
+            if isinstance(data, dict):
+                return {k.lower(): bool(v) for k, v in data.items()}
+        except Exception:
+            logger.debug("Could not read online_status.json", exc_info=True)
+
+    # Fallback: telemetry DB (only populated via log imports)
     try:
         import sqlite3 as _sqlite3
         db_path = os.path.join(Settings.analytics_path, "telemetry.db")
