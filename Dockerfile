@@ -1,4 +1,5 @@
 FROM python:3.12-slim-bookworm
+RUN apt-get update && apt-get -y dist-upgrade && rm -rf /var/lib/apt/lists/*
 
 ARG BUILDX_QEMU_ENV
 
