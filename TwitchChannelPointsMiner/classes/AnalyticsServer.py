@@ -55,6 +55,40 @@ def _resolve_settings_path() -> str:
     return os.path.join(Path().absolute(), "settings.json")
 
 
+# Analytics filenames are derived from Twitch usernames; only these chars are valid.
+_SAFE_STREAMER_RE = re.compile(r"^[A-Za-z0-9_.-]+\.json$")
+
+
+def _safe_streamer_file(streamer: str):
+    """Normalise a streamer arg to a safe '<name>.json' basename.
+
+    Returns the sanitized filename, or None if it looks like a path-traversal
+    attempt or contains illegal characters. Guards every filesystem read that
+    takes a user-supplied streamer name.
+    """
+    if not streamer or not isinstance(streamer, str):
+        return None
+    name = streamer if streamer.endswith(".json") else f"{streamer}.json"
+    # Reject anything that isn't a bare filename (no separators, no '..').
+    if name != os.path.basename(name) or not _SAFE_STREAMER_RE.match(name):
+        return None
+    return name
+
+
+def _bad_request(message: str):
+    return Response(
+        json.dumps({"error": message}), status=400, mimetype="application/json"
+    )
+
+
+# Betting strategies recognised by the miner (single source of truth for the API + UI).
+VALID_STRATEGIES = [
+    "MOST_VOTED", "HIGH_ODDS", "PERCENTAGE", "SMART_MONEY",
+    "SMART", "HISTORICAL", "KELLY_CRITERION", "CONTRARIAN",
+    "MOMENTUM", "VALUE_BET", "WEIGHTED_AVERAGE", "UNDERDOG",
+]
+
+
 def streamers_available():
     path = Settings.analytics_path
     return [
@@ -148,7 +182,13 @@ def read_json(streamer, return_response=True):
     end_date = request.args.get("endDate", type=str)
 
     path = Settings.analytics_path
-    streamer = streamer if streamer.endswith(".json") else f"{streamer}.json"
+    safe = _safe_streamer_file(streamer)
+    if safe is None:
+        error_message = "Invalid streamer name."
+        if return_response:
+            return _bad_request(error_message)
+        return {"error": error_message}
+    streamer = safe
 
     # Check if the file exists before attempting to read it
     if not os.path.exists(os.path.join(path, streamer)):
@@ -270,22 +310,25 @@ def index(refresh=5, days_ago=7):
 
 
 def streamers():
-    online_map = _get_streamers_online_status()
-    return Response(
-        json.dumps(
-            [
-                {
-                    "name": s,
-                    "points": get_challenge_points(s),
-                    "last_activity": get_last_activity(s),
-                    "is_online": online_map.get(s.replace(".json", "").lower(), False),
-                }
-                for s in sorted(streamers_available())
-            ]
-        ),
-        status=200,
-        mimetype="application/json",
-    )
+    try:
+        online_map = _get_streamers_online_status()
+        payload = [
+            {
+                "name": s,
+                "points": get_challenge_points(s),
+                "last_activity": get_last_activity(s),
+                "is_online": online_map.get(s.replace(".json", "").lower(), False),
+            }
+            for s in sorted(streamers_available())
+        ]
+        return Response(json.dumps(payload), status=200, mimetype="application/json")
+    except Exception as exc:
+        logger.error(f"Failed to build streamer list: {exc}", exc_info=True)
+        return Response(
+            json.dumps({"error": "Could not load streamer list."}),
+            status=500,
+            mimetype="application/json",
+        )
 
 
 def dry_run(streamer):
@@ -318,7 +361,9 @@ def dry_run(streamer):
 
     # Fall back to JSON
     path = Settings.analytics_path
-    streamer_file = streamer if streamer.endswith(".json") else f"{streamer}.json"
+    streamer_file = _safe_streamer_file(streamer)
+    if streamer_file is None:
+        return _bad_request("Invalid streamer name.")
 
     if not os.path.exists(os.path.join(path, streamer_file)):
         return Response(
@@ -408,7 +453,9 @@ def dry_run_summary(streamer):
 
     # Fall back to JSON
     path = Settings.analytics_path
-    streamer_file = streamer if streamer.endswith(".json") else f"{streamer}.json"
+    streamer_file = _safe_streamer_file(streamer)
+    if streamer_file is None:
+        return _bad_request("Invalid streamer name.")
 
     if not os.path.exists(os.path.join(path, streamer_file)):
         return Response(
@@ -770,7 +817,9 @@ def export_csv():
             status=400,
             mimetype="application/json",
         )
-    streamer_file = streamer if streamer.endswith(".json") else f"{streamer}.json"
+    streamer_file = _safe_streamer_file(streamer)
+    if streamer_file is None:
+        return _bad_request("Invalid streamer name.")
     path = Settings.analytics_path
 
     if not os.path.exists(os.path.join(path, streamer_file)):
@@ -818,7 +867,9 @@ def export_json():
             status=400,
             mimetype="application/json",
         )
-    streamer_file = streamer if streamer.endswith(".json") else f"{streamer}.json"
+    streamer_file = _safe_streamer_file(streamer)
+    if streamer_file is None:
+        return _bad_request("Invalid streamer name.")
     path = Settings.analytics_path
 
     if not os.path.exists(os.path.join(path, streamer_file)):
@@ -1542,17 +1593,11 @@ def strategy_switch():
     new_strategy = data.get("strategy", "").upper()
     streamer_name = data.get("streamer", "").strip()
 
-    valid_strategies = [
-        "MOST_VOTED", "HIGH_ODDS", "PERCENTAGE", "SMART_MONEY",
-        "SMART", "HISTORICAL", "KELLY_CRITERION", "CONTRARIAN",
-        "MOMENTUM", "VALUE_BET", "WEIGHTED_AVERAGE", "UNDERDOG",
-    ]
-
-    if new_strategy not in valid_strategies:
+    if new_strategy not in VALID_STRATEGIES:
         return Response(
             json.dumps({
                 "error": f"Invalid strategy '{new_strategy}'.",
-                "valid": valid_strategies,
+                "valid": VALID_STRATEGIES,
             }),
             status=400,
             mimetype="application/json",
@@ -1620,13 +1665,7 @@ def strategy_switch_all():
     data = request.get_json(silent=True) or {}
     target_strategy = data.get("strategy", "").upper()
 
-    valid_strategies = [
-        "MOST_VOTED", "HIGH_ODDS", "PERCENTAGE", "SMART_MONEY",
-        "SMART", "HISTORICAL", "KELLY_CRITERION", "CONTRARIAN",
-        "MOMENTUM", "VALUE_BET", "WEIGHTED_AVERAGE", "UNDERDOG",
-    ]
-
-    if target_strategy and target_strategy not in valid_strategies:
+    if target_strategy and target_strategy not in VALID_STRATEGIES:
         return Response(
             json.dumps({"error": f"Invalid strategy '{target_strategy}'."}),
             status=400,
@@ -1687,6 +1726,85 @@ def strategy_switch_all():
         return Response(
             json.dumps({"error": str(e)}),
             status=500,
+            mimetype="application/json",
+        )
+
+
+def get_strategies():
+    """Return the list of valid betting strategies plus the current per-streamer
+    selection, so the dashboard can render a live strategy picker."""
+    try:
+        cfg, _ = _read_settings_json()
+        current = {}
+        if cfg is not None:
+            for name in sorted(streamers_available()):
+                sname = name.replace(".json", "")
+                try:
+                    current[sname] = _get_channel_strategy(cfg, sname)
+                except Exception:
+                    current[sname] = None
+        return Response(
+            json.dumps({"strategies": VALID_STRATEGIES, "current": current}),
+            status=200,
+            mimetype="application/json",
+        )
+    except Exception as exc:
+        logger.error(f"Failed to build strategy list: {exc}", exc_info=True)
+        return Response(
+            json.dumps({"error": "Could not load strategies."}),
+            status=500,
+            mimetype="application/json",
+        )
+
+
+def discord_test():
+    """Send a test embed through the configured Discord webhook so the user gets
+    real success/failure feedback from the dashboard."""
+    discord = _get_discord()
+    if discord is None:
+        return Response(
+            json.dumps({"error": "Discord is not configured (no webhook_api found)."}),
+            status=400,
+            mimetype="application/json",
+        )
+    try:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        embed = {
+            "title": "✅ Test notification",
+            "description": (
+                "Your Twitch Channel Points Miner dashboard is connected to "
+                "this Discord channel. Notifications will appear here."
+            ),
+            "color": 0x9146FF,
+            "footer": {"text": f"Sent from the analytics dashboard · {now}"},
+        }
+        resp = requests.post(
+            discord.webhook_api,
+            json={
+                "username": "Twitch Miner",
+                "avatar_url": AVATAR_URL,
+                "embeds": [embed],
+            },
+            timeout=10,
+        )
+        if resp.status_code >= 400:
+            return Response(
+                json.dumps({
+                    "error": f"Discord rejected the request (HTTP {resp.status_code}).",
+                }),
+                status=502,
+                mimetype="application/json",
+            )
+        return Response(
+            json.dumps({"status": "ok", "message": "Test notification sent to Discord."}),
+            status=200,
+            mimetype="application/json",
+        )
+    except Exception as exc:
+        logger.error(f"Discord test failed: {exc}", exc_info=True)
+        return Response(
+            json.dumps({"error": f"Could not reach Discord: {exc}"}),
+            status=502,
             mimetype="application/json",
         )
 
@@ -2682,6 +2800,18 @@ class AnalyticsServer(Thread):
             "auto_adjust_config",
             auto_adjust_config,
             methods=["GET", "POST"],
+        )
+        self.app.add_url_rule(
+            "/api/strategies",
+            "get_strategies",
+            get_strategies,
+            methods=["GET"],
+        )
+        self.app.add_url_rule(
+            "/api/discord/test",
+            "discord_test",
+            discord_test,
+            methods=["POST"],
         )
         self.app.add_url_rule(
             "/api/discord/summary",

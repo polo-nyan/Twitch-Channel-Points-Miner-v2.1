@@ -18,16 +18,35 @@
 
     <link href="{{url_for('static', filename='style.css')}}" rel="stylesheet" />
     <link href="{{url_for('static', filename='dark-theme.css')}}" rel="stylesheet" />
+
+    <!-- Apply the saved theme before first paint to avoid a flash of the wrong theme -->
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem("tcpm-theme") || "dark";
+                document.documentElement.setAttribute("data-theme", t);
+            } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+        })();
+    </script>
 </head>
 
 <body>
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1><i class="fas fa-gem"></i> Twitch Channel Points Miner</h1>
-            <div style="display:flex; align-items:center; gap:0.75rem;">
-                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.85rem;">
-                    <input type="checkbox" checked id="dark-mode"> Dark
+            <div class="logo-area">
+                <h1><i class="fas fa-gem"></i> Twitch Channel Points Miner</h1>
+            </div>
+            <div class="header-controls">
+                <button type="button" id="discord-test-btn" class="btn btn-sm" title="Send a test notification to Discord">
+                    <i class="fab fa-discord"></i> Test Discord
+                </button>
+                <label class="switch-label" style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; font-size:0.8rem;">
+                    <span class="switch">
+                        <input type="checkbox" checked id="dark-mode" aria-label="Toggle dark mode">
+                        <span class="track" aria-hidden="true"></span>
+                    </span>
+                    <span id="theme-label">Dark</span>
                 </label>
                 <a href="/config" class="btn btn-sm" title="Edit configuration"><i class="fas fa-cog"></i> Config</a>
             </div>
@@ -106,28 +125,28 @@
                 <!-- Discord Controls (always visible) -->
                 <div class="card" id="discord-controls-card" style="padding:0.6rem 0.75rem;">
                     <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; font-size:0.85rem; margin-bottom:0.3rem;">
-                        <strong style="color:#9da2b8;"><i class="fab fa-discord"></i> Discord:</strong>
+                        <strong style="color:var(--text-muted);"><i class="fab fa-discord"></i> Discord:</strong>
                         <span id="discord-status-badge" title="Checking…">⏳</span>
-                        <button class="btn btn-sm" onclick="sendDiscordSummary()" title="Send summary embeds to Discord">📊 Send Summary</button>
-                        <button class="btn btn-sm" onclick="sendChannelLog()" title="Send channel event logbook to Discord">📖 Channel Log</button>
-                        <button class="btn btn-sm" onclick="runDiscordCleanup()" title="Clean up old messages and repost as organized embeds (backs up to DB first)">🧹 Cleanup &amp; Organize</button>
-                        <button class="btn btn-sm" onclick="runDiscordPurge()" title="Delete ALL channel messages and rebuild one logbook per streamer (requires bot_token + channel_id)">🔥 Purge &amp; Rebuild</button>
+                        <button class="btn btn-sm" onclick="sendDiscordSummary(event)" title="Send summary embeds to Discord">📊 Send Summary</button>
+                        <button class="btn btn-sm" onclick="sendChannelLog(event)" title="Send channel event logbook to Discord">📖 Channel Log</button>
+                        <button class="btn btn-sm" onclick="runDiscordCleanup(event)" title="Clean up old messages and repost as organized embeds (backs up to DB first)">🧹 Cleanup &amp; Organize</button>
+                        <button class="btn btn-sm" onclick="runDiscordPurge(event)" title="Delete ALL channel messages and rebuild one logbook per streamer (requires bot_token + channel_id)">🔥 Purge &amp; Rebuild</button>
                         <button class="btn btn-sm" id="mute-panel-toggle" onclick="toggleMutePanel()" title="Configure mute settings">🔕 Mutes</button>
                     </div>
                     <!-- Mute Panel -->
                     <div id="discord-mute-panel" style="display:none; padding:0.6rem 0.75rem; border:1px solid rgba(255,255,255,0.1); border-radius:6px; margin-top:0.25rem;">
-                        <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">Channel Mute</div>
+                        <div style="font-size:0.78rem; font-weight:600; color:var(--text-muted); margin-bottom:0.35rem;">Channel Mute</div>
                         <div style="font-size:0.8rem; margin-bottom:0.6rem;">
                             <label id="channel-mute-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
                                 <input type="checkbox" id="channel-mute-checkbox" onchange="toggleChannelMute(this)" disabled>
-                                <span id="channel-mute-name" style="color:#9da2b8;">Select a streamer first</span>
+                                <span id="channel-mute-name" style="color:var(--text-muted);">Select a streamer first</span>
                             </label>
                         </div>
-                        <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">Global Event Mutes</div>
+                        <div style="font-size:0.78rem; font-weight:600; color:var(--text-muted); margin-bottom:0.35rem;">Global Event Mutes</div>
                         <div id="global-event-mutes" style="display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.6rem;"></div>
                         <div id="channel-event-mutes-section" style="display:none;">
-                            <div style="font-size:0.78rem; font-weight:600; color:#9da2b8; margin-bottom:0.35rem;">
-                                Channel Event Mutes — <span id="channel-event-mutes-chan" style="color:#cba6f7;"></span>
+                            <div style="font-size:0.78rem; font-weight:600; color:var(--text-muted); margin-bottom:0.35rem;">
+                                Channel Event Mutes — <span id="channel-event-mutes-chan" style="color:var(--brand-soft);"></span>
                             </div>
                             <div id="channel-event-mutes" style="display:flex; flex-wrap:wrap; gap:0.3rem;"></div>
                         </div>
@@ -144,25 +163,25 @@
                     <!-- Auto-Adjust Controls -->
                     <div id="auto-adjust-controls" style="margin-top:1rem; padding:0.75rem; border-top:1px solid rgba(255,255,255,0.1);">
                         <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; font-size:0.85rem;">
-                            <strong style="color:#9da2b8;"><i class="fas fa-robot"></i> Auto-Adjust:</strong>
+                            <strong style="color:var(--text-muted);"><i class="fas fa-robot"></i> Auto-Adjust:</strong>
                             <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
                                 <input type="checkbox" id="aa-enabled"> Enabled
                             </label>
                             <label style="display:flex; align-items:center; gap:4px;">
-                                Threshold: <input type="number" id="aa-threshold" value="3" min="1" max="20" style="width:3rem; padding:2px 4px; background:#1e1e2e; color:#cdd6f4; border:1px solid #45475a; border-radius:4px;">
+                                Threshold: <input type="number" id="aa-threshold" value="3" min="1" max="20" style="width:3rem; padding:2px 4px; background:var(--surface); color:var(--text); border:1px solid var(--border-strong); border-radius:4px;">
                             </label>
                             <label style="display:flex; align-items:center; gap:4px;">
-                                Min predictions: <input type="number" id="aa-min-preds" value="5" min="1" max="100" style="width:3rem; padding:2px 4px; background:#1e1e2e; color:#cdd6f4; border:1px solid #45475a; border-radius:4px;">
+                                Min predictions: <input type="number" id="aa-min-preds" value="5" min="1" max="100" style="width:3rem; padding:2px 4px; background:var(--surface); color:var(--text); border:1px solid var(--border-strong); border-radius:4px;">
                             </label>
                             <button class="btn btn-sm" onclick="saveAutoAdjust()">Save</button>
-                            <span id="aa-status" style="color:#36b535; display:none;"></span>
+                            <span id="aa-status" style="color:var(--success); display:none;"></span>
                         </div>
                     </div>
 
                     <!-- DB Export/Import -->
                     <div style="margin-top:0.75rem; padding:0.75rem; border-top:1px solid rgba(255,255,255,0.1);">
                         <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; font-size:0.85rem;">
-                            <strong style="color:#9da2b8;"><i class="fas fa-database"></i> Telemetry DB:</strong>
+                            <strong style="color:var(--text-muted);"><i class="fas fa-database"></i> Telemetry DB:</strong>
                             <a class="btn btn-sm" href="./api/telemetry/export/db" title="Download telemetry.db file">💾 Export DB</a>
                             <a class="btn btn-sm" href="./api/telemetry/export/json" title="Export all data as JSON">📄 Export JSON</a>
                             <button class="btn btn-sm" onclick="importTelemetryDB()" title="Import a telemetry.db or JSON export">📥 Import</button>
@@ -173,14 +192,18 @@
             </main>
         </div>
     </div>
+
+    <!-- Toast notifications + confirm dialogs are injected here -->
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+    <div id="dialog-host"></div>
 </body>
 
 <!-- Strategy Switch All Results Modal -->
 <div id="strategy-all-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:2000; align-items:center; justify-content:center;">
-    <div style="background:#1e1e2e; border-radius:8px; padding:1.5rem; max-width:520px; width:92%; max-height:72vh; overflow-y:auto; border:1px solid #45475a; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+    <div style="background:var(--surface-2); border-radius:var(--radius); padding:1.5rem; max-width:520px; width:92%; max-height:72vh; overflow-y:auto; border:1px solid var(--border-strong); box-shadow:var(--shadow);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-            <strong style="color:#cdd6f4; font-size:0.95rem;">🌐 Strategy Switch Results</strong>
-            <button onclick="document.getElementById('strategy-all-modal').style.display='none'" style="background:none; border:none; color:#9da2b8; cursor:pointer; font-size:1.2rem; line-height:1;">✕</button>
+            <strong style="color:var(--text); font-size:0.95rem;">🌐 Strategy Switch Results</strong>
+            <button onclick="document.getElementById('strategy-all-modal').style.display='none'" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem; line-height:1;">✕</button>
         </div>
         <div id="strategy-all-modal-content"></div>
     </div>
@@ -190,13 +213,31 @@
     // Flask template variables must be injected here (can't access in external JS)
     function toggleDarkMode() {
         var darkMode = $('#dark-mode').prop("checked");
-        $("link[href='{{url_for('static', filename='dark-theme.css')}}']").prop("disabled", !darkMode);
-        chart.updateOptions({
-            colors: darkMode ? ["#f9826c"] : ['#008ffb'],
-            chart: { foreColor: darkMode ? "#e0e0e0" : '#373d3f' },
-            tooltip: { theme: darkMode ? "dark" : "light" }
-        });
+        var theme = darkMode ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", theme);
+        try { localStorage.setItem("tcpm-theme", theme); } catch (e) {}
+        $('#theme-label').text(darkMode ? "Dark" : "Light");
+        // Recolor the chart from the active theme's CSS variables
+        if (typeof chart !== "undefined" && chart) {
+            var css = getComputedStyle(document.documentElement);
+            var accent = (css.getPropertyValue('--accent') || '#f9826c').trim();
+            var fore = (css.getPropertyValue('--text-muted') || '#9da2b8').trim();
+            chart.updateOptions({
+                colors: [accent],
+                chart: { foreColor: fore },
+                tooltip: { theme: theme },
+                grid: { borderColor: (css.getPropertyValue('--border') || '#2b3048').trim() }
+            });
+        }
     }
+    // Sync the checkbox to the theme applied pre-paint (default dark)
+    (function () {
+        var current = document.documentElement.getAttribute("data-theme") || "dark";
+        $(function () {
+            $('#dark-mode').prop("checked", current !== "light");
+            $('#theme-label').text(current === "light" ? "Light" : "Dark");
+        });
+    })();
     var refresh = parseInt("{{ refresh }}");
     var daysAgo = parseInt("{{ daysAgo }}");
 </script>

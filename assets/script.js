@@ -1,3 +1,120 @@
+// =========================================================================
+// UX plumbing: toasts, confirm dialogs, HTML escaping, button loading.
+// Shared by every user action so nothing fails silently.
+// =========================================================================
+
+/** Escape a string for safe insertion into HTML. */
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/** Show a transient toast. type: success | error | warning | info. */
+function showToast(message, type, opts) {
+    opts = opts || {};
+    var container = document.getElementById('toast-container');
+    if (!container) { console[(type === 'error') ? 'error' : 'log'](message); return; }
+    var icons = { success: '✅', error: '⚠️', warning: '⚠️', info: 'ℹ️' };
+    type = type || 'info';
+    var toast = document.createElement('div');
+    toast.className = 'toast toast-' + type;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+
+    var icon = document.createElement('span');
+    icon.className = 'toast-icon';
+    icon.textContent = icons[type] || icons.info;
+
+    var body = document.createElement('div');
+    body.style.flex = '1';
+    // message may contain \n — render as text with line breaks
+    String(message).split('\n').forEach(function (line, i) {
+        if (i > 0) body.appendChild(document.createElement('br'));
+        body.appendChild(document.createTextNode(line));
+    });
+
+    var close = document.createElement('button');
+    close.className = 'toast-close';
+    close.setAttribute('aria-label', 'Dismiss');
+    close.textContent = '✕';
+
+    var removed = false;
+    function remove() {
+        if (removed) return; removed = true;
+        toast.classList.add('is-hiding');
+        setTimeout(function () { toast.remove(); }, 220);
+    }
+    close.onclick = remove;
+
+    toast.appendChild(icon);
+    toast.appendChild(body);
+    toast.appendChild(close);
+    container.appendChild(toast);
+
+    var ttl = opts.duration != null ? opts.duration : (type === 'error' ? 7000 : 4000);
+    if (ttl > 0) setTimeout(remove, ttl);
+    return toast;
+}
+
+/** Promise-based confirm dialog (replaces window.confirm). Resolves true/false. */
+function confirmDialog(opts) {
+    opts = (typeof opts === 'string') ? { message: opts } : (opts || {});
+    return new Promise(function (resolve) {
+        var host = document.getElementById('dialog-host') || document.body;
+        var backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop';
+        var danger = !!opts.danger;
+        var card = document.createElement('div');
+        card.className = 'modal-card';
+
+        var h = document.createElement('h3');
+        h.textContent = opts.title || 'Please confirm';
+        var body = document.createElement('div');
+        body.className = 'modal-body';
+        body.textContent = opts.message || 'Are you sure?';
+
+        var actions = document.createElement('div');
+        actions.className = 'modal-actions';
+        var cancel = document.createElement('button');
+        cancel.className = 'btn';
+        cancel.textContent = opts.cancelText || 'Cancel';
+        var ok = document.createElement('button');
+        ok.className = 'btn ' + (danger ? '' : 'btn-primary');
+        if (danger) { ok.style.background = 'var(--danger)'; ok.style.borderColor = 'var(--danger)'; ok.style.color = '#fff'; }
+        ok.textContent = opts.confirmText || 'Confirm';
+
+        function done(val) { backdrop.remove(); document.removeEventListener('keydown', onKey); resolve(val); }
+        function onKey(e) { if (e.key === 'Escape') done(false); }
+        cancel.onclick = function () { done(false); };
+        ok.onclick = function () { done(true); };
+        backdrop.onclick = function (e) { if (e.target === backdrop) done(false); };
+        document.addEventListener('keydown', onKey);
+
+        actions.appendChild(cancel); actions.appendChild(ok);
+        card.appendChild(h); card.appendChild(body); card.appendChild(actions);
+        backdrop.appendChild(card); host.appendChild(backdrop);
+        ok.focus();
+    });
+}
+
+/** Put a button into a loading state; returns a restore function. */
+function buttonLoading(el) {
+    var btn = (el && el.jquery) ? el[0] : el;
+    if (!btn) return function () {};
+    btn.classList.add('is-loading');
+    btn.disabled = true;
+    return function () { btn.classList.remove('is-loading'); btn.disabled = false; };
+}
+
+/** Extract an {error} message from a jqXHR, with a fallback. */
+function ajaxError(xhr, fallback) {
+    try { return JSON.parse(xhr.responseText).error || fallback; } catch (e) { return fallback; }
+}
+
 // https://apexcharts.com/javascript-chart-demos/line-charts/zoomable-timeseries/
 var options = {
     series: [],
@@ -116,11 +233,13 @@ $(document).ready(function () {
 
     // Defaults
     if (!localStorage.getItem("annotations")) localStorage.setItem("annotations", true);
-    if (!localStorage.getItem("dark-mode")) localStorage.setItem("dark-mode", true);
     if (!localStorage.getItem("sort-by")) localStorage.setItem("sort-by", "Name ascending");
 
     $('#annotations').prop("checked", localStorage.getItem("annotations") === "true");
-    $('#dark-mode').prop("checked", localStorage.getItem("dark-mode") === "true");
+    // Theme was already applied pre-paint (see charts.html head); derive the
+    // checkbox from the live data-theme so the toggle and stored theme agree.
+    $('#dark-mode').prop("checked",
+        (document.documentElement.getAttribute("data-theme") || "dark") !== "light");
 
     $('#annotations').click(() => {
         localStorage.setItem("annotations", $('#annotations').prop("checked"));
@@ -203,11 +322,31 @@ $(document).ready(function () {
         window.location.href = '/api/export/json?streamer=' + encodeURIComponent(name);
     });
 
+    // Test Discord notification
+    $('#discord-test-btn').click(function () {
+        testDiscord(this);
+    });
+
     // Global stats
     loadGlobalStats();
     // Discord connection status badge
     loadDiscordStatus();
 });
+
+function testDiscord(btn) {
+    var restore = buttonLoading(btn);
+    $.ajax({
+        url: './api/discord/test',
+        method: 'POST',
+        success: function (resp) {
+            showToast((resp && resp.message) || 'Test notification sent to Discord.', 'success');
+        },
+        error: function (xhr) {
+            showToast(ajaxError(xhr, 'Could not send Discord test'), 'error');
+        },
+        complete: restore
+    });
+}
 
 function formatDate(date) {
     var d = new Date(date),
@@ -278,6 +417,13 @@ function getAllStreamersData() {
 }
 
 function getStreamers() {
+    // Show a skeleton while the first load is in flight
+    if (!streamersList || !streamersList.length) {
+        var sk = '';
+        for (var i = 0; i < 6; i++) sk += '<li class="skeleton skeleton-row" style="list-style:none;"></li>';
+        $("#streamers-list").html(sk);
+    }
+
     $.getJSON('streamers', function (response) {
         streamersList = response;
         sortStreamers();
@@ -294,6 +440,12 @@ function getStreamers() {
 
         // Ensure the selected streamer is still active and scrolled into view
         renderStreamers();
+    }).fail(function (xhr) {
+        $("#streamers-list").html(
+            '<li style="list-style:none;"><div class="empty-state">' +
+            '<span class="icon">📡</span>' + escapeHtml(ajaxError(xhr, 'Could not load streamers.')) +
+            '</div></li>'
+        );
     });
 
     // Auto-refresh streamer list every 10 seconds (live status + points)
@@ -348,7 +500,7 @@ function renderStreamers() {
             var li = '<li id="streamer-' + streamer.name + '" class="' + activeClass + onlineClass + mutedClass + '"' +
                 ' onclick="changeStreamer(\'' + streamer.name + '\', 0); return false;">' +
                 dot +
-                '<span class="streamer-name">' + displayname + '</span>' +
+                '<span class="streamer-name">' + escapeHtml(displayname) + '</span>' +
                 '<span class="streamer-info">' + pointsHtml + relTime + '</span>' +
                 '<button class="streamer-action-btn" onclick="event.stopPropagation(); showStreamerMenu(\'' + streamer.name + '\', this)" title="Actions">⋯</button>' +
                 '</li>';
@@ -363,6 +515,14 @@ function renderStreamers() {
     if (offlineStreamers.length > 0) {
         $("#streamers-list").append('<li class="streamer-group-header">⚫ Offline (' + offlineStreamers.length + ')</li>');
         renderGroup(offlineStreamers);
+    }
+
+    if (!streamersList.length) {
+        $("#streamers-list").append(
+            '<li style="list-style:none;"><div class="empty-state">' +
+            '<span class="icon">📭</span>No streamers tracked yet.<br>Analytics appear once the miner starts watching.' +
+            '</div></li>'
+        );
     }
 
     if (currentStreamer) {
@@ -430,11 +590,9 @@ function sendChannelLogForStreamer(channelName) {
     $.ajax({
         url: './api/discord/channel_log?streamer=' + encodeURIComponent(channelName) + '&limit=100',
         method: 'POST',
-        success: function () { /* silent success */ },
+        success: function () { showToast('Channel log sent to Discord for ' + channelName, 'success'); },
         error: function (xhr) {
-            var err = 'Failed';
-            try { err = JSON.parse(xhr.responseText).error || err; } catch (e) {}
-            alert('Channel log failed: ' + err);
+            showToast('Channel log failed: ' + ajaxError(xhr, 'unknown error'), 'error');
         }
     });
 }
@@ -531,32 +689,44 @@ function loadDryRunData(streamer) {
 
 function switchStrategy(strategyName, streamerName) {
     var scope = streamerName || (typeof currentStreamer !== 'undefined' ? currentStreamer.replace('.json', '') : '');
-    var msg = 'Switch strategy to ' + strategyName + ' for ' + (scope || 'all channels') + '?\nThis updates settings.json.';
-    if (!confirm(msg)) return;
-    $.ajax({
-        url: './api/strategy/switch',
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({ strategy: strategyName, streamer: scope }),
-        success: function (resp) {
-            var msg = resp.message || ('Switched to ' + strategyName);
-            alert(msg);
-            // Reload config and refresh dry-run immediately
-            $.post('./api/config/reload');
-            if (typeof currentStreamer !== 'undefined' && currentStreamer) {
-                loadDryRunData(currentStreamer);
+    confirmDialog({
+        title: 'Switch strategy',
+        message: 'Switch strategy to ' + strategyName + ' for ' + (scope || 'all channels') + '?\nThis updates settings.json.',
+        confirmText: 'Switch'
+    }).then(function (ok) {
+        if (!ok) return;
+        $.ajax({
+            url: './api/strategy/switch',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ strategy: strategyName, streamer: scope }),
+            success: function (resp) {
+                showToast(resp.message || ('Switched to ' + strategyName), 'success');
+                // Reload config and refresh dry-run immediately
+                $.post('./api/config/reload');
+                if (typeof currentStreamer !== 'undefined' && currentStreamer) {
+                    loadDryRunData(currentStreamer);
+                }
+            },
+            error: function (xhr) {
+                showToast(ajaxError(xhr, 'Strategy switch failed'), 'error');
             }
-        },
-        error: function (xhr) {
-            var err = 'Switch failed';
-            try { err = JSON.parse(xhr.responseText).error || err; } catch(e) {}
-            alert(err);
-        }
+        });
     });
 }
 
 function switchStrategyAll() {
-    if (!confirm('Apply the best-performing strategy to ALL channels?\nThis will analyze each channel and set the optimal strategy.')) return;
+    confirmDialog({
+        title: 'Apply best strategy everywhere',
+        message: 'Apply the best-performing strategy to ALL channels?\nThis will analyze each channel and set the optimal strategy.',
+        confirmText: 'Apply to all'
+    }).then(function (ok) {
+        if (!ok) return;
+        _switchStrategyAllConfirmed();
+    });
+}
+
+function _switchStrategyAllConfirmed() {
     $.ajax({
         url: './api/strategy/switch_all',
         method: 'POST',
@@ -566,27 +736,28 @@ function switchStrategyAll() {
             var count = resp.count || 0;
             var switched = resp.switched || [];
 
-            var html = '<p style="color:#9da2b8; margin-bottom:0.75rem; font-size:0.85rem;">Switched <strong style="color:#cdd6f4;">' + count + '</strong> channel(s)</p>';
+            var html = '<p style="color:var(--text-muted); margin-bottom:0.75rem; font-size:0.85rem;">Switched <strong style="color:var(--text);">' + count + '</strong> channel(s)</p>';
             if (switched.length > 0) {
                 html += '<table style="width:100%; border-collapse:collapse; font-size:0.8rem;">';
-                html += '<thead><tr style="border-bottom:1px solid #45475a;">' +
-                    '<th style="text-align:left; padding:0.3rem 0.5rem; color:#9da2b8;">Channel</th>' +
-                    '<th style="text-align:left; padding:0.3rem 0.5rem; color:#9da2b8;">Old</th>' +
-                    '<th style="text-align:left; padding:0.3rem 0.5rem; color:#9da2b8;">New</th>' +
+                html += '<thead><tr style="border-bottom:1px solid var(--border-strong);">' +
+                    '<th style="text-align:left; padding:0.3rem 0.5rem; color:var(--text-muted);">Channel</th>' +
+                    '<th style="text-align:left; padding:0.3rem 0.5rem; color:var(--text-muted);">Old</th>' +
+                    '<th style="text-align:left; padding:0.3rem 0.5rem; color:var(--text-muted);">New</th>' +
                     '</tr></thead><tbody>';
                 switched.forEach(function (s) {
-                    html += '<tr style="border-bottom:1px solid #313244;">' +
-                        '<td style="padding:0.3rem 0.5rem; color:#cdd6f4;">' + s.streamer + '</td>' +
-                        '<td style="padding:0.3rem 0.5rem; color:#ff4545;">' + (s.old || '—') + '</td>' +
-                        '<td style="padding:0.3rem 0.5rem; color:#36b535;">' + s.new + '</td>' +
+                    html += '<tr style="border-bottom:1px solid var(--border);">' +
+                        '<td style="padding:0.3rem 0.5rem; color:var(--text);">' + escapeHtml(s.streamer) + '</td>' +
+                        '<td style="padding:0.3rem 0.5rem; color:var(--danger);">' + escapeHtml(s.old || '—') + '</td>' +
+                        '<td style="padding:0.3rem 0.5rem; color:var(--success);">' + escapeHtml(s.new) + '</td>' +
                         '</tr>';
                 });
                 html += '</tbody></table>';
             } else {
-                html += '<p style="color:#9da2b8; font-size:0.85rem;">No changes required — all channels already on optimal strategy.</p>';
+                html += '<p style="color:var(--text-muted); font-size:0.85rem;">No changes required — all channels already on optimal strategy.</p>';
             }
             $('#strategy-all-modal-content').html(html);
             $('#strategy-all-modal').css('display', 'flex');
+            showToast('Applied best strategy to ' + count + ' channel(s)', 'success');
 
             $.post('./api/config/reload');
             if (typeof currentStreamer !== 'undefined' && currentStreamer) {
@@ -594,9 +765,7 @@ function switchStrategyAll() {
             }
         },
         error: function (xhr) {
-            var err = 'Switch failed';
-            try { err = JSON.parse(xhr.responseText).error || err; } catch(e) {}
-            alert(err);
+            showToast(ajaxError(xhr, 'Strategy switch failed'), 'error');
         }
     });
 }
@@ -629,91 +798,99 @@ function saveAutoAdjust() {
         data: JSON.stringify(data),
         success: function () {
             $('#aa-status').text('Saved!').fadeIn().delay(1500).fadeOut();
+            showToast('Auto-adjust settings saved', 'success');
         },
-        error: function () {
+        error: function (xhr) {
             $('#aa-status').text('Failed').fadeIn().delay(1500).fadeOut();
+            showToast(ajaxError(xhr, 'Could not save auto-adjust settings'), 'error');
         }
     });
 }
 
-function sendDiscordSummary() {
+function sendDiscordSummary(ev) {
+    var restore = buttonLoading(ev && (ev.currentTarget || ev.target));
     $.ajax({
         url: './api/discord/summary',
         method: 'POST',
         success: function (resp) {
-            alert('Sent ' + (resp.embeds || 1) + ' embed(s) for ' + (resp.streamers || 0) + ' streamer(s).');
+            showToast('Sent ' + (resp.embeds || 1) + ' embed(s) for ' + (resp.streamers || 0) + ' streamer(s).', 'success');
         },
         error: function (xhr) {
-            var err = 'Failed';
-            try { err = JSON.parse(xhr.responseText).error || err; } catch(e) {}
-            alert(err);
-        }
+            showToast(ajaxError(xhr, 'Could not send summary'), 'error');
+        },
+        complete: restore
     });
 }
 
-function sendChannelLog() {
-    var name = (typeof currentStreamer !== 'undefined' && currentStreamer) 
-        ? currentStreamer.replace(".json", "") 
+function sendChannelLog(ev) {
+    var name = (typeof currentStreamer !== 'undefined' && currentStreamer)
+        ? currentStreamer.replace(".json", "")
         : null;
     if (!name) {
-        alert('Please select a streamer first.');
+        showToast('Please select a streamer first.', 'warning');
         return;
     }
+    var restore = buttonLoading(ev && (ev.currentTarget || ev.target));
     $.ajax({
         url: './api/discord/channel_log?streamer=' + encodeURIComponent(name) + '&limit=100',
         method: 'POST',
         success: function (resp) {
-            var sent = resp.sent || 0;
-            var total = resp.total_events || 0;
-            alert('Sent ' + sent + ' embed(s) covering ' + total + ' event(s).');
+            showToast('Sent ' + (resp.sent || 0) + ' embed(s) covering ' + (resp.total_events || 0) + ' event(s).', 'success');
         },
         error: function (xhr) {
-            var err = 'Failed';
-            try { err = JSON.parse(xhr.responseText).error || err; } catch(e) {}
-            alert(err);
-        }
+            showToast(ajaxError(xhr, 'Could not send channel log'), 'error');
+        },
+        complete: restore
     });
 }
 
-function runDiscordCleanup() {
-    if (!confirm('This will:\n1. Fetch old messages\n2. Back up to telemetry DB\n3. Re-post as organized embeds\n4. Delete originals\n\nContinue?')) return;
-    $.ajax({
-        url: './api/discord/cleanup?cleanup=true&limit=200',
-        method: 'POST',
-        success: function (resp) {
-            var total = resp.total || 0;
-            var migrated = resp.migrated || 0;
-            var backedUp = resp.backed_up || 0;
-            var groups = resp.groups || {};
-            var details = Object.keys(groups).map(function(s) {
-                return s + ': ' + groups[s].count + ' messages';
-            }).join('\n');
-            alert('Found ' + total + ' messages\nBacked up: ' + backedUp + '\nMigrated: ' + migrated + '\n\n' + details);
-        },
-        error: function (xhr) {
-            var err = 'Cleanup failed';
-            try { err = JSON.parse(xhr.responseText).error || err; } catch(e) {}
-            alert(err);
-        }
+function runDiscordCleanup(ev) {
+    var btn = ev && (ev.currentTarget || ev.target);
+    confirmDialog({
+        title: 'Clean up & re-post Discord messages',
+        message: 'This will:\n1. Fetch old messages\n2. Back up to telemetry DB\n3. Re-post as organized embeds\n4. Delete originals',
+        confirmText: 'Run cleanup'
+    }).then(function (ok) {
+        if (!ok) return;
+        var restore = buttonLoading(btn);
+        $.ajax({
+            url: './api/discord/cleanup?cleanup=true&limit=200',
+            method: 'POST',
+            success: function (resp) {
+                showToast('Cleanup done — ' + (resp.total || 0) + ' found, ' +
+                    (resp.backed_up || 0) + ' backed up, ' + (resp.migrated || 0) + ' migrated.', 'success');
+            },
+            error: function (xhr) {
+                showToast(ajaxError(xhr, 'Cleanup failed'), 'error');
+            },
+            complete: restore
+        });
     });
 }
 
-function runDiscordPurge() {
-    if (!confirm('🔥 PURGE & REBUILD\n\nThis will:\n1. DELETE ALL messages in the Discord channel\n2. Rebuild ONE logbook embed per streamer\n\nRequires bot_token + channel_id for full purge.\nWebhook-only: only stored logbook messages will be cleared.\n\nContinue?')) return;
-    $.ajax({
-        url: './api/discord/cleanup?purge=true&rebuild=true&limit=500',
-        method: 'POST',
-        success: function (resp) {
-            var purged = resp.purged || 0;
-            var sent = resp.logbooks_sent || 0;
-            var streamers = (resp.streamers || []).join(', ') || 'none';
-            alert('Purge complete!\n\nDeleted: ' + purged + ' messages\nLogbooks rebuilt: ' + sent + '\nStreamers: ' + streamers);
-        },
-        error: function (xhr) {
-            var err = 'Purge failed';
-            try { err = JSON.parse(xhr.responseText).error || err; } catch(e) {}
-            alert(err);
-        }
+function runDiscordPurge(ev) {
+    var btn = ev && (ev.currentTarget || ev.target);
+    confirmDialog({
+        title: '🔥 Purge & rebuild Discord channel',
+        danger: true,
+        confirmText: 'Purge & rebuild',
+        message: 'This will DELETE ALL messages in the Discord channel and rebuild ONE logbook embed per streamer.\n\n' +
+            'Requires bot_token + channel_id for a full purge.\nWebhook-only: only stored logbook messages will be cleared.'
+    }).then(function (ok) {
+        if (!ok) return;
+        var restore = buttonLoading(btn);
+        $.ajax({
+            url: './api/discord/cleanup?purge=true&rebuild=true&limit=500',
+            method: 'POST',
+            success: function (resp) {
+                showToast('Purge complete — deleted ' + (resp.purged || 0) + ' message(s), rebuilt ' +
+                    (resp.logbooks_sent || 0) + ' logbook(s).', 'success');
+            },
+            error: function (xhr) {
+                showToast(ajaxError(xhr, 'Purge failed'), 'error');
+            },
+            complete: restore
+        });
     });
 }
 
@@ -736,14 +913,12 @@ function handleDBImport(fileInput) {
             var imported = resp.imported || {};
             var summary = Object.keys(imported).map(function(k) {
                 return k + ': ' + imported[k];
-            }).join('\n');
-            alert('Import successful!\n\n' + summary);
+            }).join(', ');
+            showToast('Import successful' + (summary ? ' — ' + summary : '') + '.', 'success');
             fileInput.value = '';
         },
         error: function (xhr) {
-            var err = 'Import failed';
-            try { err = JSON.parse(xhr.responseText).error || err; } catch(e) {}
-            alert(err);
+            showToast(ajaxError(xhr, 'Import failed'), 'error');
             fileInput.value = '';
         }
     });
