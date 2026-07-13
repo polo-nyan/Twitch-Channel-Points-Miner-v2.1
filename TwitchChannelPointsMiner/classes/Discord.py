@@ -183,6 +183,7 @@ class Discord(object):
         "bot_token",
         "channel_id",
         "_session_cache",
+        "_session_stats",
     ]
 
     def __init__(
@@ -213,6 +214,9 @@ class Discord(object):
         # Per-channel in-memory event lines for session digest embed
         # {"channelname": ["HH:MM icon line", ...]}
         self._session_cache: dict = {}
+        # Per-channel running session tallies for the digest summary header
+        # {"channelname": {"net", "win", "lose", "refund", "raids", "bonus", "moment"}}
+        self._session_stats: dict = {}
 
     def is_muted(self, event: Events, channel: str = None) -> bool:
         event_str = str(event)
@@ -252,6 +256,80 @@ class Discord(object):
             }
 
         return embed
+
+    @staticmethod
+    def _new_stats() -> dict:
+        return {"net": 0, "win": 0, "lose": 0, "refund": 0, "raids": 0, "bonus": 0, "moment": 0}
+
+    @staticmethod
+    def _parse_points(raw: str) -> int:
+        """Parse a points amount like '+1,234', '-500', '1.2k', '3M' into an int."""
+        if not raw:
+            return 0
+        s = raw.strip().replace(",", "")
+        sign = -1 if s.startswith("-") else 1
+        s = s.lstrip("+-").strip()
+        mult = 1
+        if s and s[-1] in "kKmMbBtT":
+            mult = {"k": 1e3, "m": 1e6, "b": 1e9, "t": 1e12}[s[-1].lower()]
+            s = s[:-1]
+        try:
+            return int(sign * float(s) * mult)
+        except (ValueError, TypeError):
+            return 0
+
+    def _update_session_stats(self, chan_key: str, event_str: str, message: str) -> None:
+        """Update the per-channel running tallies used by the digest summary header."""
+        stats = self._session_stats.setdefault(chan_key, self._new_stats())
+        msg = message.strip()
+
+        m = _SESSION_BET_RESULT_RE.search(msg)
+        if m:
+            result = m.group(3).upper()
+            if result == "WIN":
+                stats["win"] += 1
+            elif result == "LOSE":
+                stats["lose"] += 1
+            else:
+                stats["refund"] += 1
+            stats["net"] += self._parse_points(m.group(4) or "")
+            return
+
+        m = _POINTS_GAIN_RE.search(msg)
+        if m:
+            stats["net"] += self._parse_points(m.group(1))
+            return
+
+        if event_str == "JOIN_RAID":
+            stats["raids"] += 1
+        elif event_str == "BONUS_CLAIM":
+            stats["bonus"] += 1
+        elif event_str == "MOMENT_CLAIM":
+            stats["moment"] += 1
+
+    def _build_summary_header(self, chan_key: str) -> str | None:
+        """Build a bold at-a-glance summary line from the session tallies, or None if empty."""
+        stats = self._session_stats.get(chan_key)
+        if not stats:
+            return None
+        segments = []
+        net = stats["net"]
+        if net:
+            segments.append(f"**{'+' if net >= 0 else '−'}{abs(net):,} pts**")
+        if stats["win"] or stats["lose"] or stats["refund"]:
+            rec = f"\U0001f3c6 {stats['win']}W · ❌ {stats['lose']}L"
+            if stats["refund"]:
+                rec += f" · \U0001f504 {stats['refund']}R"
+            segments.append(rec)
+        if stats["raids"]:
+            segments.append(f"⚔️ {stats['raids']} raid{'s' if stats['raids'] != 1 else ''}")
+        if stats["bonus"]:
+            segments.append(f"\U0001f381 {stats['bonus']}")
+        if stats["moment"]:
+            segments.append(f"⭐ {stats['moment']}")
+        if not segments:
+            return None
+        return "  ·  ".join(segments)
 
     def _format_session_line(self, event_str: str, message: str) -> str:
         """Format one event as a compact timestamped log line for the session digest."""
@@ -340,12 +418,18 @@ class Discord(object):
         chan_key = (channel or "_global").lower()
         lines = list(self._session_cache.get(chan_key, []))
         color = EVENT_COLORS.get(latest_event_str, 0x7289DA)
-        description = "\n".join(lines) if lines else "*Session starting\u2026*"
-        # Enforce Discord embed description limit (4096 chars; cap at 3900 for safety)
-        if len(description) > 3900:
-            while lines and len("\n".join(lines)) > 3900:
+
+        # At-a-glance summary header (net points, W/L, raids) pinned above the log
+        header = self._build_summary_header(chan_key)
+        header_block = f"{header}\n{'\u2500' * 12}\n" if header else ""
+        # Enforce Discord's 4096-char description limit (cap at 3900); always keep the header
+        budget = 3900 - len(header_block)
+        body = "\n".join(lines) if lines else "*Session starting\u2026*"
+        if len(body) > budget:
+            while lines and len("\n".join(lines)) > budget:
                 lines = lines[1:]
-            description = "\n".join(lines) if lines else "*…*"
+            body = "\n".join(lines) if lines else "*…*"
+        description = header_block + body
         now_str = datetime.now(timezone.utc).strftime("%d %b %H:%M UTC")
         embed = {
             "title": f"\U0001f4fa {channel or 'Twitch'} \u2014 Live Activity",
@@ -402,6 +486,8 @@ class Discord(object):
             # Reset cache with delimiter only (no redundant "Stream Online" line)
             now_hhmm = datetime.now().strftime("%H:%M")
             self._session_cache[chan_key] = [f"\u2500\u2500\u2500 \U0001f7e2 Session started {now_hhmm} \u2500\u2500\u2500"]
+            # Fresh session -> reset the running tallies behind the summary header
+            self._session_stats[chan_key] = self._new_stats()
             # Skip appending the generic _format_session_line for ONLINE — delimiter is enough
             self._session_cache[chan_key] = self._session_cache[chan_key][-30:]
             if not state_path:
@@ -417,6 +503,7 @@ class Discord(object):
         if event_str != "STREAMER_OFFLINE":
             line = self._format_session_line(event_str, message)
             self._session_cache.setdefault(chan_key, []).append(line)
+            self._update_session_stats(chan_key, event_str, message)
 
         # STREAMER_OFFLINE: append session end delimiter only
         if event_str == "STREAMER_OFFLINE":
