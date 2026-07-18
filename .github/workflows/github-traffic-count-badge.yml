@@ -2,8 +2,12 @@ name: GitHub Traffic Count Update Everyday
 
 on:
   schedule:
-    - cron: "0 */24 * * *"
+    - cron: '24 */24 * * *'
   workflow_dispatch:
+
+concurrency:
+  group: '${{ github.workflow }}-${{ github.ref }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
