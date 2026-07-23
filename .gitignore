@@ -158,3 +158,11 @@ keep_replit_alive.py
 replit.nix
 data/
 .playwright-mcp/
+# claude harness local state (the knowledge artifacts under .claude/ are tracked; these are not)
+.claude/settings.local.json
+.claude/*.stamp
+.claude/.wiki_last_commit
+.claude/.wiki_ingest_queue
+.claude/.docsync.json
+.claude/readme-index.json
+.claude/scheduled_tasks.lock
