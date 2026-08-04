@@ -8,7 +8,9 @@ summary: 'Session work (2026-08-04):
 
   Edited this session: TwitchChannelPointsMiner/TwitchChannelPointsMiner.py, TwitchChannelPointsMiner/classes/Twitch.py,
   TwitchChannelPointsMiner/constants'
-related: []
+related:
+- docs/root-ai-notice
+- docs/root-improvements
 web: []
 ---
 
