@@ -142,13 +142,14 @@ class Twitch(object):
             headers = {"User-Agent": USER_AGENTS["Linux"]["FIREFOX"]}
 
             main_page_request = requests.get(
-                streamer.streamer_url, headers=headers)
+                streamer.streamer_url, headers=headers, timeout=(5, 15))
             response = main_page_request.text
             # logger.info(response)
             regex_settings = "(https://static.twitchcdn.net/config/settings.*?js|https://assets.twitch.tv/config/settings.*?.js)"
             settings_url = re.search(regex_settings, response).group(1)
 
-            settings_request = requests.get(settings_url, headers=headers)
+            settings_request = requests.get(
+                settings_url, headers=headers, timeout=(5, 15))
             response = settings_request.text
             regex_spade = '"spade_url":"(.*?)"'
             streamer.stream.spade_url = re.search(
@@ -156,13 +157,22 @@ class Twitch(object):
         except requests.exceptions.RequestException as e:
             logger.error(
                 f"Something went wrong during extraction of 'spade_url': {e}")
+        except AttributeError:
+            # Regex miss (Twitch changed the settings-JS URL or spade_url shape):
+            # .group(1) on None. Leave spade_url unset rather than crash the caller.
+            logger.error(
+                "Could not locate 'spade_url' — Twitch page format may have changed."
+            )
 
     def get_broadcast_id(self, streamer):
         json_data = copy.deepcopy(GQLOperations.WithIsStreamLiveQuery)
         json_data["variables"] = {"id": streamer.channel_id}
         response = self.post_gql_request(json_data)
         if response != {}:
-            stream = response["data"]["user"]["stream"]
+            user = (response.get("data") or {}).get("user")
+            if user is None:
+                raise StreamerIsOfflineException
+            stream = user["stream"]
             if stream is not None:
                 return stream["id"]
             else:
@@ -174,10 +184,11 @@ class Twitch(object):
         json_data["variables"] = {"channel": streamer.username}
         response = self.post_gql_request(json_data)
         if response != {}:
-            if response["data"]["user"]["stream"] is None:
+            user = (response.get("data") or {}).get("user")
+            if user is None or user.get("stream") is None:
                 raise StreamerIsOfflineException
             else:
-                return response["data"]["user"]
+                return user
 
     def check_streamer_online(self, streamer):
         if time.time() < streamer.offline_at + 60:
@@ -289,6 +300,9 @@ class Twitch(object):
                     "User-Agent": self.user_agent,
                     "X-Device-Id": self.device_id,
                 },
+                # Without a timeout a stalled socket blocks the calling thread
+                # forever (missed bets, frozen minute-watcher). (connect, read)
+                timeout=(5, 15),
             )
             logger.debug(
                 f"Data: {json_data}, Status code: {response.status_code}, Content: {response.text}"
