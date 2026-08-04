@@ -722,6 +722,20 @@ Disabling Analytics significantly reduces memory consumption and saves some disk
 
 Set `enable_analytics=True` if you need the analytics dashboard, HISTORICAL strategy, or dry-run comparison. Otherwise set it to `False` (default).
 
+## Staying in sync with upstream
+This is a fork of [`rdavydov/Twitch-Channel-Points-Miner-v2`](https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2) and has diverged substantially (modern dashboard, richer Discord digest, telemetry/backup, rate limiter, config editor). Twitch periodically rotates its GraphQL persisted-query hashes, which breaks miners until the new hashes are pulled in — so it's worth watching upstream for those keep-alive fixes.
+
+This repo intentionally keeps **no `upstream` git remote** (a live remote made `gh pr create` default its base to upstream and open an accidental PR there). Instead:
+
+- **`scripts/check-upstream.sh`** — a read-only nudge. It fetches upstream *by URL* into a private ref, filters out anything already applied (by patch-id), and lists what's worth pulling, flagging commits that touch the GQL/Twitch API code:
+  ```bash
+  ./scripts/check-upstream.sh            # human-readable report
+  ./scripts/check-upstream.sh --porcelain  # "<sha> <subject>" per line
+  ```
+- **`.github/workflows/upstream-watch.yml`** — runs that script weekly and opens/updates a tracking **issue on this repo** when upstream has pullable commits.
+
+**Integration rule:** always **cherry-pick** the specific fix onto a branch here and open a PR against `master` of *this* fork. Never merge the whole upstream tree (it would clobber this fork's features), and never open a PR to upstream. The tooling above is read-only with respect to upstream by design.
+
 ## Migrating from an old repository (the original one):
 If you already have a `twitch-cookies.pkl` and you don't want to log in again, please create a `cookies/` folder in the current directory and then copy the .pkl file with a new name `your-twitch-username.pkl`
 ```
