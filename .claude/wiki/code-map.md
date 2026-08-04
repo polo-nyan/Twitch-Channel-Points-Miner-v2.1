@@ -93,9 +93,9 @@ graph LR
   n_WebSocketsPool --> n_ClientIRC
   n_Streamer --> n_Streamer_py
   n_TwitchChannelPointsMiner --> n_TwitchLogin
-  n_AnalyticsServer --> n_script_js
   n_EventPrediction --> n_utils_py
   n_Streamer --> n_utils_py
+  n_AnalyticsServer --> n_script_js
   n_AnalyticsServer --> n_DryRunResult
   n_runpy_converter_py --> n_Discord_py
   n_WebSocketsPool --> n_EventPrediction

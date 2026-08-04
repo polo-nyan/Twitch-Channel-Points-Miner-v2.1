@@ -325,8 +325,10 @@ class TwitchChannelPointsMiner:
                 self.twitch.claim_all_drops_from_inventory()
 
             # Remember these so the main loop can re-sync newly followed
-            # channels at runtime without a restart.
-            self._blacklist = blacklist
+            # channels at runtime without a restart. Normalize the blacklist to
+            # lowercase so the case-insensitive follower diff in _sync_followers
+            # actually matches (get_followers returns lowercased logins).
+            self._blacklist = [b.lower().strip() for b in blacklist]
             self._followers_enabled = followers
             self._followers_order = followers_order
 
@@ -597,8 +599,11 @@ class TwitchChannelPointsMiner:
             )
             return False
 
-        self.streamers.append(streamer)
-
+        # Do all the fallible setup BEFORE touching either shared list, so the
+        # streamer is only ever added once fully initialised. self.streamers and
+        # self.original_streamers are index-aligned (the shutdown report indexes
+        # one by the other) — appending to only one on a mid-way failure would
+        # desync them and later raise IndexError / misreport points.
         try:
             self.twitch.load_channel_points_context(streamer)
             self.twitch.check_streamer_online(streamer)
@@ -607,10 +612,16 @@ class TwitchChannelPointsMiner:
                 f"Streamer {streamer.username} does not exist",
                 extra={"emoji": ":cry:"},
             )
-            # Roll back so we don't keep a half-initialised streamer.
-            self.streamers.remove(streamer)
+            return False
+        except Exception:
+            logger.warning(
+                f"Failed to initialise streamer {streamer.username}; skipping",
+                exc_info=True,
+            )
             return False
 
+        # Append to both lists together — they must stay index-aligned.
+        self.streamers.append(streamer)
         self.original_streamers.append(streamer.channel_points)
 
         # The minute-watcher and sync-campaigns threads already iterate the

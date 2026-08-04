@@ -1,4 +1,5 @@
 import ast
+import hmac
 import json
 import logging
 import os
@@ -19,6 +20,16 @@ from TwitchChannelPointsMiner.utils import download_file
 
 cli.show_server_banner = lambda *_: None
 logger = logging.getLogger(__name__)
+
+# Optional shared secret for the dashboard's state-changing endpoints. Several
+# POST routes (notably /api/config/save) write a run.py/settings.json that is
+# executed on the next restart — i.e. unauthenticated access is effectively RCE.
+# When ANALYTICS_TOKEN is set, those endpoints require the token (via header,
+# ?token=, or a SameSite=Strict cookie auto-set when you open the dashboard with
+# ?token=<T>). Empty by default → behaviour unchanged; recommended whenever the
+# server is bound to anything other than 127.0.0.1.
+_ANALYTICS_TOKEN = os.environ.get("ANALYTICS_TOKEN", "").strip()
+_STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 # Module-level telemetry instance (initialised lazily in AnalyticsServer)
 _telemetry: Telemetry | None = None
@@ -290,7 +301,7 @@ def json_all():
         json.dumps(
             [
                 {
-                    "name": streamer.strip(".json"),
+                    "name": streamer.replace(".json", ""),
                     "data": read_json(streamer, return_response=False),
                 }
                 for streamer in streamers_available()
@@ -2659,6 +2670,37 @@ class AnalyticsServer(Thread):
             template_folder=os.path.join(Path().absolute(), "assets"),
             static_folder=os.path.join(Path().absolute(), "assets"),
         )
+
+        # Gate the state-changing endpoints behind ANALYTICS_TOKEN when set.
+        # Opt-in: with no token this is a no-op and the dashboard behaves exactly
+        # as before. A valid ?token= on any request drops a SameSite=Strict
+        # cookie, so opening the dashboard once with the token keeps every POST
+        # authenticated without touching the front-end JS — while blocking
+        # cross-site (CSRF / DNS-rebinding) writes, which never carry the cookie.
+        @self.app.before_request
+        def _enforce_analytics_token():
+            if not _ANALYTICS_TOKEN:
+                return None
+            if request.method not in _STATE_CHANGING_METHODS:
+                return None
+            provided = (
+                request.headers.get("X-Analytics-Token", "")
+                or request.args.get("token", "")
+                or request.cookies.get("analytics_token", "")
+            ).strip()
+            if not hmac.compare_digest(provided, _ANALYTICS_TOKEN):
+                return Response("Unauthorized", status=401)
+            return None
+
+        @self.app.after_request
+        def _persist_analytics_token(response):
+            if _ANALYTICS_TOKEN:
+                q = request.args.get("token", "").strip()
+                if q and hmac.compare_digest(q, _ANALYTICS_TOKEN):
+                    response.set_cookie(
+                        "analytics_token", q, httponly=True, samesite="Strict"
+                    )
+            return response
         self.app.add_url_rule(
             "/",
             "index",
@@ -2879,5 +2921,12 @@ class AnalyticsServer(Thread):
             f"Analytics running on http://{self.host}:{self.port}/",
             extra={"emoji": ":globe_with_meridians:"},
         )
+        if self.host not in ("127.0.0.1", "localhost") and not _ANALYTICS_TOKEN:
+            logger.warning(
+                f"Analytics dashboard is bound to {self.host} with unauthenticated "
+                "state-changing endpoints (e.g. /api/config/save can write an "
+                "executable run.py). Set ANALYTICS_TOKEN and open the dashboard with "
+                "?token=<TOKEN>, or bind to 127.0.0.1, if this port is reachable."
+            )
         self.app.run(host=self.host, port=self.port,
                      threaded=True, debug=False)

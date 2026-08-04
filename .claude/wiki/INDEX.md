@@ -17,7 +17,7 @@ Edited this session: TwitchChannelPointsMiner/TwitchChannelPointsMiner.py, Twitc
 - [Twitch-Channel-Points-Miner-v2.1 code map](code-map.md) — Code map: Twitch-Channel-Points-Miner-v2.1 — 31 components, 40 call-dependencies (top); core: utils.py, RateLimiter.py, Bet.py, Chat.py
 
 ## repo-map
-- [Twitch-Channel-Points-Miner-v2.1 repo map](repo-map.md) — Repo map: Twitch-Channel-Points-Miner-v2.1 — Python (41), HTML (2), CSS (2), JavaScript (1); 83 tracked files; Docker, Python
+- [Twitch-Channel-Points-Miner-v2.1 repo map](repo-map.md) — Repo map: Twitch-Channel-Points-Miner-v2.1 — Python (41), HTML (2), CSS (2), JavaScript (1); 94 tracked files; Docker, Python
 
 ## symbol-map
 - [Twitch-Channel-Points-Miner-v2.1 symbol map](symbol-map.md) — Every symbol in Twitch-Channel-Points-Miner-v2.1: 491 across 37 files, with file:line, signature, docblock, callers and callees.
