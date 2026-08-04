@@ -8,9 +8,7 @@ summary: 'Session work (2026-08-04):
 
   Edited this session: TwitchChannelPointsMiner/TwitchChannelPointsMiner.py, TwitchChannelPointsMiner/classes/Twitch.py,
   TwitchChannelPointsMiner/constants'
-related:
-- docs/root-ai-notice
-- docs/root-improvements
+related: []
 web: []
 ---
 
@@ -26,3 +24,25 @@ b285492 Sync upstream fixes, harden setup wizard, auto-mine newly followed chann
 - The new file `.claude/wiki/INDEX.json` was added, containing information about the changelog, code map, AI-assisted development notice, operating guide, code of conduct, contributing guidelines, improvement plan, and repository structure.
 - Information on previous roadmaps and priorities has been 
 files: `.claude/wiki/INDEX.json`, `.claude/wiki/INDEX.md`, `.claude/wiki/changelog.md`, `.claude/wiki/code-map.md`, `.claude/wiki/docs/root-ai-notice.md`, `.claude/wiki/docs/root-claude.md`, `.claude/wiki/docs/root-code-of-conduct.md`, `.claude/wiki/docs/root-contributing.md`, `.claude/wiki/docs/root-improvements.md`, `.claude/wiki/repo-map.md`, `.claude/wiki/symbol-map.md`
+
+## Findings — 2026-08-04
+
+### 2026-08-04 · `ef181cb` chore(auto-docs): refresh wiki code/symbol maps for sweep changes
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+files: `.claude/wiki/INDEX.json`, `.claude/wiki/code-map.md`, `.claude/wiki/symbol-map.md`
+
+### 2026-08-04 · `88bdeab` Fix runtime-add desync, add request timeouts, guard API responses, gate dashboard
+Follow-up sweep after #17 — real bugs and robustness/security hardening found by
+review of the core miner code.
+
+Bugs:
+- TwitchChannelPointsMiner.py: _add_streamer_runtime appended to self.streamers
+  before load_channel_points_context/check_streamer_online, and only caught
+  StreamerDoesNotExistExc
+files: `TwitchChannelPointsMiner/TwitchChannelPointsMiner.py`, `TwitchChannelPointsMiner/classes/AnalyticsServer.py`, `TwitchChannelPointsMiner/classes/Twitch.py`
+
+### 2026-08-04 · `d9a91ff` chore(auto-docs): refresh wiki docs (4 files)
+- The project now includes a new section titled "Call dependencies (who calls whom)" in the code map.
+- A new document, "AI-Assisted Development Notice," has been added to inform users about AI-generated commits and agent guidance.
+- The improvement plan has been updated with completed features and 
+files: `.claude/wiki/INDEX.json`, `.claude/wiki/INDEX.md`, `.claude/wiki/changelog.md`, `.claude/wiki/repo-map.md`
