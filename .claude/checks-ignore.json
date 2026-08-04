@@ -1,0 +1,16 @@
+{
+  "suppressions": [
+    {
+      "file": "*",
+      "symbol": "AnalyticsServer::_enforce_analytics_token",
+      "check": "deadparams",
+      "reason": "Flask before_request hook (registered via @self.app.before_request decorator; invoked by Flask, never by name)"
+    },
+    {
+      "file": "*",
+      "symbol": "AnalyticsServer::_persist_analytics_token",
+      "check": "deadparams",
+      "reason": "Flask after_request hook (registered via @self.app.after_request decorator; invoked by Flask, never by name)"
+    }
+  ]
+}
