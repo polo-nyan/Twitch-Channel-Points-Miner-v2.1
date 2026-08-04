@@ -1,0 +1,107 @@
+{
+ "ok": true,
+ "readme": "README.md",
+ "type": "library",
+ "type_detected": "library",
+ "type_evidence": [
+  "src layout"
+ ],
+ "type_confident": false,
+ "type_override": null,
+ "scanned_ts": 1785834665,
+ "sections": [
+  {
+   "title": "Community",
+   "anchor": "community",
+   "hash": "8ec98a88706d",
+   "chars": 209
+  },
+  {
+   "title": "What's New in v2.1",
+   "anchor": "whats-new-in-v21",
+   "hash": "706d09d1fd77",
+   "chars": 1941
+  },
+  {
+   "title": "Original v2 Features",
+   "anchor": "original-v2-features",
+   "hash": "5565c5ffb35c",
+   "chars": 1367
+  },
+  {
+   "title": "Logs feature",
+   "anchor": "logs-feature",
+   "hash": "c0ac7d81a3be",
+   "chars": 9158
+  },
+  {
+   "title": "How to use:",
+   "anchor": "how-to-use",
+   "hash": "f77389ab17a6",
+   "chars": 17530
+  },
+  {
+   "title": "Settings",
+   "anchor": "settings",
+   "hash": "5d7755d255b7",
+   "chars": 19058
+  },
+  {
+   "title": "Analytics",
+   "anchor": "analytics",
+   "hash": "1a514c46251a",
+   "chars": 2670
+  },
+  {
+   "title": "Staying in sync with upstream",
+   "anchor": "staying-in-sync-with-upstream",
+   "hash": "14740ad5ae06",
+   "chars": 1450
+  },
+  {
+   "title": "Migrating from an old repository (the original one):",
+   "anchor": "migrating-from-an-old-repository-the-original-one",
+   "hash": "7a3cf897ef53",
+   "chars": 274
+  },
+  {
+   "title": "Windows",
+   "anchor": "windows",
+   "hash": "2b11bd23b5a0",
+   "chars": 476
+  },
+  {
+   "title": "Termux",
+   "anchor": "termux",
+   "hash": "fce64356c740",
+   "chars": 1466
+  },
+  {
+   "title": "Disclaimer",
+   "anchor": "disclaimer",
+   "hash": "be47d7f6443b",
+   "chars": 271
+  }
+ ],
+ "changed_since_last": [
+  "staying-in-sync-with-upstream"
+ ],
+ "findings": [
+  {
+   "check": "commands",
+   "sev": "info",
+   "msg": "`pkg` \u2014 not on PATH here (fine if users install it)"
+  },
+  {
+   "check": "commands",
+   "sev": "info",
+   "msg": "`pkg` \u2014 not on PATH here (fine if users install it)"
+  },
+  {
+   "check": "commands",
+   "sev": "info",
+   "msg": "`pkg` \u2014 not on PATH here (fine if users install it)"
+  }
+ ],
+ "verified_ts": 1785834665
+}
