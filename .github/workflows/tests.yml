@@ -1,0 +1,37 @@
+name: tests
+
+# Offline unit tests. Deliberately does not install the miner's full runtime
+# dependencies (irc, flask, pandas): the suite loads the modules under test
+# straight off disk, so a run needs only pytest and requests and finishes in
+# seconds even on a slow self-hosted runner.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: '${{ github.workflow }}-${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: python -m pip install --quiet pytest requests
+
+      - name: Run tests
+        run: python -m pytest tests/ -v

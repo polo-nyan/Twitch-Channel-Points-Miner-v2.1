@@ -61,10 +61,11 @@ Read more about the channel points [here](https://help.twitch.tv/s/article/chann
     - [Web Config Editor](#web-config-editor)
     - [Discord Logbook](#discord-logbook)
     - [Telemetry & Backup](#telemetry--backup)
-8. 🍪 [Migrating from an old repository (the original one)](#migrating-from-an-old-repository-the-original-one)
-9. 🪟 [Windows](#windows)
-10. 📱 [Termux](#termux)
-11. ⚠️ [Disclaimer](#disclaimer)
+8. 🔑 [Self-healing GraphQL hashes](#self-healing-graphql-hashes)
+9. 🍪 [Migrating from an old repository (the original one)](#migrating-from-an-old-repository-the-original-one)
+10. 🪟 [Windows](#windows)
+11. 📱 [Termux](#termux)
+12. ⚠️ [Disclaimer](#disclaimer)
 
 
 ## Community
@@ -722,8 +723,28 @@ Disabling Analytics significantly reduces memory consumption and saves some disk
 
 Set `enable_analytics=True` if you need the analytics dashboard, HISTORICAL strategy, or dry-run comparison. Otherwise set it to `False` (default).
 
+## Self-healing GraphQL hashes
+Every call this miner makes to Twitch is a *persisted query*: rather than the GraphQL document, it sends a `sha256Hash` that Twitch looks up server-side. Twitch rotates those hashes whenever it redeploys a query, and historically that broke every miner in the wild until someone published new constants and everyone redeployed. Worse, the breakage is usually **silent** — `viewer_is_mod` just starts answering "no", moment claiming just stops claiming.
+
+This fork repairs itself instead. Twitch's endpoint accepts a raw GraphQL document with only a `Client-Id` header, and it registers new hashes on the fly, so a running miner can re-register the documents it ships and carry on:
+
+- **At startup and every 12 hours**, it asks Twitch (unauthenticated) which of its hashes are still recognised, and repairs the ones that aren't — catching the silent breakage before you notice it. Set `GQL_REFRESH_HOURS=0` to disable, or to any number of hours to change the interval.
+- **Mid-flight**, a request rejected with `PERSISTED_QUERY_NOT_FOUND` is retried with the document inlined. That single retry answers the original request *and* re-registers the hash, so subsequent calls go back to being hash-only.
+- **As a fallback**, operations that ship no document have their hash re-read from upstream's `constants.py`.
+
+Repaired hashes are cached in `cache/gql_hashes.json` so a restart doesn't re-probe. It's pure derived state — deleting it costs one probe round at the next start. Under Docker the directory is ephemeral unless you mount it, which is fine; mount `./cache:/usr/src/app/cache` if you'd rather skip the startup probe.
+
+Two things to know if you're working on this:
+
+```bash
+scripts/gql_check.py              # which hashes does Twitch still recognise?
+scripts/gql_check.py --documents  # also check our documents against the live schema
+```
+
+`.github/workflows/gql-hash-check.yml` runs that weekly. A rotated hash on its own doesn't fail the build — the miner handles those. It fails, and opens an issue, only when a hash rotates for an operation with **no shipped document** (nothing can repair that one) or when a shipped document stops matching Twitch's schema. Documents live in `GQL_DOCUMENTS` in [`TwitchChannelPointsMiner/classes/GQLHealer.py`](TwitchChannelPointsMiner/classes/GQLHealer.py); add one only with the checker green, because a document that omits a field its caller reads trades a stale hash for a `KeyError`.
+
 ## Staying in sync with upstream
-This is a fork of [`rdavydov/Twitch-Channel-Points-Miner-v2`](https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2) and has diverged substantially (modern dashboard, richer Discord digest, telemetry/backup, rate limiter, config editor). Twitch periodically rotates its GraphQL persisted-query hashes, which breaks miners until the new hashes are pulled in — so it's worth watching upstream for those keep-alive fixes.
+This is a fork of [`rdavydov/Twitch-Channel-Points-Miner-v2`](https://github.com/rdavydov/Twitch-Channel-Points-Miner-v2) and has diverged substantially (modern dashboard, richer Discord digest, telemetry/backup, rate limiter, config editor). Upstream is still worth watching for API keep-alive fixes, though the hash rotations it most often carries are now handled automatically — see [above](#self-healing-graphql-hashes).
 
 This repo intentionally keeps **no `upstream` git remote** (a live remote made `gh pr create` default its base to upstream and open an accidental PR there). Instead:
 

@@ -30,6 +30,7 @@ from TwitchChannelPointsMiner.classes.Exceptions import (
     StreamerDoesNotExistException,
     StreamerIsOfflineException,
 )
+from TwitchChannelPointsMiner.classes.GQLHealer import GQLHealer, stale_operations
 from TwitchChannelPointsMiner.classes.Settings import (
     Events,
     FollowersOrder,
@@ -65,6 +66,8 @@ class Twitch(object):
         "client_session",
         "client_version",
         "twilight_build_id_pattern",
+        "gql_healer",
+        "gql_healer_next_refresh",
     ]
 
     def __init__(self, username, user_agent, password=None):
@@ -86,6 +89,36 @@ class Twitch(object):
         self.twilight_build_id_pattern = re.compile(
             r'window\.__twilightBuildID\s*=\s*"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"'
         )
+        # Twitch rotates its persisted-query hashes without warning; the healer
+        # re-registers them at runtime so a rotation doesn't need a redeploy.
+        self.gql_healer = GQLHealer(user_agent=self.user_agent)
+        self.gql_healer.load_cache()
+        self.gql_healer_next_refresh = 0.0
+
+    def refresh_gql_hashes(self, force=False):
+        """Probe every persisted-query hash and repair the stale ones.
+
+        Cheap (one unauthenticated request per operation) and only run on the
+        interval below, but it catches the failure mode that reactive healing
+        can't: operations whose breakage is silent because the caller ignores
+        the response, such as claim_moment or viewer_is_mod.
+
+        Set GQL_REFRESH_HOURS=0 to disable.
+        """
+        try:
+            interval_hours = float(os.environ.get("GQL_REFRESH_HOURS", "12"))
+        except ValueError:
+            interval_hours = 12.0
+        if interval_hours <= 0:
+            return set()
+        if force is False and time.time() < self.gql_healer_next_refresh:
+            return set()
+        self.gql_healer_next_refresh = time.time() + interval_hours * 3600
+        try:
+            return self.gql_healer.refresh()
+        except Exception:
+            logger.debug("GQL hash refresh failed", exc_info=True)
+            return set()
 
     def login(self):
         if not os.path.isfile(self.cookies_file):
@@ -286,20 +319,32 @@ class Twitch(object):
             )
             self.__chuncked_sleep(random_sleep * 60, chunk_size=chunk_size)
 
+    def __gql_headers(self):
+        return {
+            "Authorization": f"OAuth {self.twitch_login.get_auth_token()}",
+            "Client-Id": CLIENT_ID,
+            # "Client-Integrity": self.post_integrity(),
+            "Client-Session-Id": self.client_session,
+            "Client-Version": self.update_client_version(),
+            "User-Agent": self.user_agent,
+            "X-Device-Id": self.device_id,
+        }
+
+    @staticmethod
+    def __gql_operation_names(json_data):
+        entries = json_data if isinstance(json_data, list) else [json_data]
+        return [
+            entry.get("operationName")
+            for entry in entries
+            if isinstance(entry, dict) and entry.get("operationName")
+        ]
+
     def post_gql_request(self, json_data):
         try:
             response = requests.post(
                 GQLOperations.url,
                 json=json_data,
-                headers={
-                    "Authorization": f"OAuth {self.twitch_login.get_auth_token()}",
-                    "Client-Id": CLIENT_ID,
-                    # "Client-Integrity": self.post_integrity(),
-                    "Client-Session-Id": self.client_session,
-                    "Client-Version": self.update_client_version(),
-                    "User-Agent": self.user_agent,
-                    "X-Device-Id": self.device_id,
-                },
+                headers=self.__gql_headers(),
                 # Without a timeout a stalled socket blocks the calling thread
                 # forever (missed bets, frozen minute-watcher). (connect, read)
                 timeout=(5, 15),
@@ -307,12 +352,55 @@ class Twitch(object):
             logger.debug(
                 f"Data: {json_data}, Status code: {response.status_code}, Content: {response.text}"
             )
-            return response.json()
+            parsed = response.json()
+
+            # Twitch rotated a persisted-query hash out from under us. Retry the
+            # same call with the GraphQL document inlined: that answers this
+            # request *and* re-registers the hash, so later calls go back to
+            # being hash-only. See classes/GQLHealer.py.
+            stale = stale_operations(json_data, parsed)
+            if stale:
+                parsed = self.__retry_with_gql_documents(json_data, stale, parsed)
+            return parsed
         except requests.exceptions.RequestException as e:
-            logger.error(
-                f"Error with GQLOperations ({json_data['operationName']}): {e}"
-            )
+            names = ", ".join(self.__gql_operation_names(json_data)) or "unknown"
+            logger.error(f"Error with GQLOperations ({names}): {e}")
             return {}
+
+    def __retry_with_gql_documents(self, json_data, stale, fallback):
+        """Re-send `json_data` with documents inlined for the stale operations."""
+        logger.warning(
+            f"Twitch rejected the persisted-query hash for {', '.join(sorted(stale))} "
+            f"— retrying with the full GraphQL document"
+        )
+        repaired = self.gql_healer.repair_payload(json_data, stale)
+        if repaired is None:
+            # No document shipped for these operations; fall back to refreshing
+            # the hash itself. The current call is lost either way, but the next
+            # one works.
+            self.gql_healer.heal(stale)
+            return fallback
+
+        try:
+            response = requests.post(
+                GQLOperations.url,
+                json=repaired,
+                headers=self.__gql_headers(),
+                timeout=(5, 15),
+            )
+            retried = response.json()
+        except (requests.exceptions.RequestException, ValueError) as e:
+            logger.error(f"GQL document retry failed for {', '.join(sorted(stale))}: {e}")
+            return fallback
+
+        if stale_operations(repaired, retried):
+            logger.error(
+                f"GQL document retry still rejected for {', '.join(sorted(stale))}"
+            )
+            return fallback
+
+        self.gql_healer.adopt_repaired(stale)
+        return retried
 
     # Request for Integrity Token
     # Twitch needs Authorization, Client-Id, X-Device-Id to generate JWT which is used for authorize gql requests
