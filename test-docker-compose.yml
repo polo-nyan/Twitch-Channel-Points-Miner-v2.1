@@ -9,6 +9,12 @@ services:
     restart: unless-stopped
     environment:
       - TERM=xterm-256color
+      # Gates the dashboard's state-changing endpoints (/api/config/save can
+      # write an executable run.py). Left empty here on purpose — set the real
+      # value in the deployment's own environment, never in this file.
+      - ANALYTICS_TOKEN=${ANALYTICS_TOKEN:-}
+      # How often to re-check Twitch's persisted-query hashes. 0 disables.
+      - GQL_REFRESH_HOURS=${GQL_REFRESH_HOURS:-12}
     volumes:
      # - './data/analytics:/usr/src/app/analytics'
      # - './data/cookies:/usr/src/app/cookies'
@@ -19,6 +25,9 @@ services:
       - data:/usr/src/app/cookies
       - logs:/usr/src/app/logs
       - settings:/usr/src/app/settings
+      # Healed GQL hashes. Derived state, so losing it is harmless — but keeping
+      # it across redeploys saves a probe round on every start.
+      - cache:/usr/src/app/cache
     #ports:    
     #  - '5005:5005'
     healthcheck:
@@ -31,3 +40,4 @@ volumes:
   data:
   logs:
   settings:
+  cache:
