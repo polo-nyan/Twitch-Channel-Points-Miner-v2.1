@@ -1,0 +1,125 @@
+name: gql-hash-check
+
+# Twitch rotates the sha256 hashes behind its GraphQL persisted queries without
+# warning. When one rotates, the feature using it breaks — usually *silently*,
+# because most call sites ignore the error. This job asks Twitch weekly which of
+# our hashes it still recognises.
+#
+# The miner repairs rotated hashes by itself at runtime (see
+# TwitchChannelPointsMiner/classes/GQLHealer.py), so a rotation alone is not a
+# problem and does not fail the build. What does fail the build:
+#
+#   * a rotated hash for an operation we ship no GraphQL document for — nothing
+#     can repair that one, so a document needs writing, and
+#   * a shipped document that no longer matches Twitch's schema.
+#
+# No credentials are involved: a request carrying only a Client-Id is enough to
+# tell a live hash from a dead one.
+
+on:
+  schedule:
+    - cron: '41 5 * * 1'   # Mondays 05:41 UTC, before upstream-watch
+  workflow_dispatch:
+  push:
+    paths:
+      - 'TwitchChannelPointsMiner/constants.py'
+      - 'TwitchChannelPointsMiner/classes/GQLHealer.py'
+      - 'scripts/gql_check.py'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: '${{ github.workflow }}'
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # gql_check.py loads constants.py and GQLHealer.py straight off disk, so
+      # the miner's heavy runtime deps (irc, flask, pandas) are not needed here.
+      - name: Install probe dependencies
+        run: python -m pip install --quiet requests
+
+      - name: Probe persisted-query hashes
+        id: probe
+        shell: bash
+        run: |
+          set +e
+          python scripts/gql_check.py --documents | tee /tmp/gql_report.txt
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+          python scripts/gql_check.py --documents --json > /tmp/gql_report.json 2>/dev/null
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          report = json.load(open("/tmp/gql_report.json"))
+          print(f"stale={len(report['stale'])}")
+          print(f"unrepairable={len(report['unrepairable'])}")
+          broken = [n for n, i in report["documents"].items() if i["status"] != "ok"]
+          print(f"broken_documents={len(broken)}")
+          PY
+
+      - name: Open or update tracking issue
+        if: steps.probe.outputs.unrepairable != '0' || steps.probe.outputs.broken_documents != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('/tmp/gql_report.txt', 'utf8');
+            const { owner, repo } = context.repo;
+            const title = '🔑 Twitch rotated a GQL hash we cannot self-heal';
+            const body = [
+              'Automated by `.github/workflows/gql-hash-check.yml`.',
+              '',
+              'Twitch no longer recognises one or more persisted-query hashes, and',
+              'the miner cannot repair them on its own because no GraphQL document',
+              'is shipped for the affected operation (or a shipped document no',
+              'longer matches the schema).',
+              '',
+              'To fix: add or correct the entry in `GQL_DOCUMENTS`',
+              '(`TwitchChannelPointsMiner/classes/GQLHealer.py`), then confirm with',
+              '`scripts/gql_check.py --documents`. Twitch reports the type it',
+              'expected in its error text, which makes the document easy to derive.',
+              '',
+              '```',
+              report.trim(),
+              '```',
+            ].join('\n');
+
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const found = open.find(i => i.title === title && !i.pull_request);
+
+            if (found) {
+              await github.rest.issues.update({ owner, repo, issue_number: found.number, body });
+              core.info(`Updated issue #${found.number}`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+              core.info(`Created issue #${created.data.number}`);
+            }
+
+      - name: Summarise
+        shell: bash
+        run: |
+          {
+            echo "### Twitch GQL persisted-query hashes"
+            echo
+            echo "- rotated: ${{ steps.probe.outputs.stale }}"
+            echo "- rotated with no document to repair them: ${{ steps.probe.outputs.unrepairable }}"
+            echo "- shipped documents that no longer match the schema: ${{ steps.probe.outputs.broken_documents }}"
+            echo
+            echo '```'
+            cat /tmp/gql_report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "${{ steps.probe.outputs.exit }}"

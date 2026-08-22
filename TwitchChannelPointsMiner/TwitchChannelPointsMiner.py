@@ -321,6 +321,14 @@ class TwitchChannelPointsMiner:
 
             self.twitch.login()
 
+            # Before anything talks to the GQL API, make sure none of our
+            # persisted-query hashes have been rotated out. Stale ones mostly
+            # fail silently, so we look rather than wait to be told.
+            try:
+                self.twitch.refresh_gql_hashes(force=True)
+            except Exception:
+                logger.debug("Startup GQL hash refresh failed", exc_info=True)
+
             if self.claim_drops_startup is True:
                 self.twitch.claim_all_drops_from_inventory()
 
@@ -506,6 +514,13 @@ class TwitchChannelPointsMiner:
                         self._check_settings_reload()
                     except Exception:
                         logger.debug("Settings reload check failed", exc_info=True)
+
+                # Repair any persisted-query hash Twitch rotated while we were
+                # running. Self-throttled to GQL_REFRESH_HOURS (default 12).
+                try:
+                    self.twitch.refresh_gql_hashes()
+                except Exception:
+                    logger.debug("GQL hash refresh failed", exc_info=True)
 
                 # Periodically pick up newly followed channels without a restart.
                 if (

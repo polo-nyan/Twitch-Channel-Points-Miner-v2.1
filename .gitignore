@@ -158,3 +158,5 @@ keep_replit_alive.py
 replit.nix
 data/
 .playwright-mcp/
+# Runtime GQL persisted-query hash cache (derived state, see classes/GQLHealer.py)
+cache/

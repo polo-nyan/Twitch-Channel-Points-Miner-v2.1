@@ -35,6 +35,7 @@ Status of the previous 25-point roadmap and the next set of priorities.
 | Dockerfile rewrite | `python:3.12-slim-bookworm`, consolidated layers, HEALTHCHECK, COPY instead of ADD, removed unnecessary build deps |
 | `.env` / `python-dotenv` | Secrets loaded from `.env` file before settings are parsed |
 | Self-hosted CI | All GitHub Actions workflows changed from `ubuntu-latest` to `self-hosted` |
+| Self-healing GQL hashes | `classes/GQLHealer.py` re-registers Twitch's rotating persisted-query hashes at runtime — proactively (startup + every `GQL_REFRESH_HOURS`, default 12) and reactively (retry with the GraphQL document inlined on `PERSISTED_QUERY_NOT_FOUND`), falling back to upstream's `constants.py`. Repaired hashes cached in `cache/gql_hashes.json`. `scripts/gql_check.py` + `gql-hash-check.yml` surface operations no shipped document can repair. |
 
 ---
 
@@ -42,7 +43,7 @@ Status of the previous 25-point roadmap and the next set of priorities.
 
 ### 🔴 Critical
 
-1. **Add unit tests** — `pytest` suite for `Bet.calculate` (all 20 strategies), `settings_loader` round-trip, `export` downgrade logic, filter conditions. Target: 80% coverage of `Bet.py` and `settings_loader.py`.
+1. **Add unit tests** — `tests/` now exists (`tests/test_gql_healer.py`, 26 cases, run by `.github/workflows/tests.yml`), but the important suites are still missing: `Bet.calculate` (all 20 strategies), `settings_loader` round-trip, `export` downgrade logic, filter conditions. Target: 80% coverage of `Bet.py` and `settings_loader.py`.
 
 ### 🟡 Medium — Features
 
