@@ -700,6 +700,8 @@ Edit `settings.json` directly in the browser without touching files. Supports vi
 
 ![Config Editor](assets/config-editor.png)
 
+> **Set `ANALYTICS_TOKEN` if the dashboard listens on anything but localhost.** Saving config writes an executable `run.py`, so `/api/config/save` and the other state-changing endpoints are remote code execution by design. With the variable set they require the token — as an `X-Analytics-Token` header, or `?token=` when opening the dashboard. With it unset and the bind address not localhost, the miner warns at startup and leaves them open.
+
 ### Discord Logbook
 
 The **📖 Channel Log** button sends one persistent Discord embed per channel. Every subsequent click *edits* that same message — keeping your Discord feed clean. The embed shows the last 25 events with timestamps, win/loss icons, strategy tags, and a running net-points/win-rate footer.
