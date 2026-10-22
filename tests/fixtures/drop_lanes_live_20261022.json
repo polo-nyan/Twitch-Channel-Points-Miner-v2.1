@@ -1,0 +1,681 @@
+{
+ "DropChannelCampaignsProgress": {
+  "data": {
+   "channelDropCampaignsProgress": [
+    {
+     "brandName": "Apple",
+     "endAt": "2026-11-03T19:59:59.999Z",
+     "game": null,
+     "id": "df28c49a-1a1f-45d5-b3e5-603cb4a7b208",
+     "name": "1 Month of Apple TV",
+     "rewardGroups": [
+      {
+       "id": "4c02faf6-c8bf-11f1-8ea4-0a58a9feac02",
+       "lane": null,
+       "name": "1 Month of Apple TV",
+       "progressCriteria": {
+        "isAutoProgressable": true,
+        "isRepeatable": false,
+        "repeatableConfig": null,
+        "requirementType": "SUB",
+        "requirements": {
+         "minutesWatched": null,
+         "subs": 1,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "CODE",
+         "id": "1e20a97c-c84e-11f1-b89b-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "1 Month of Apple TV"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": null,
+        "currentWindow": null,
+        "grantCount": 0,
+        "nextEligibleAt": null,
+        "status": "IN_PROGRESS"
+       },
+       "track": null
+      }
+     ],
+     "startAt": "2026-10-20T19:00:00Z"
+    },
+    {
+     "brandName": "Pokemon",
+     "endAt": "2026-10-24T23:59:59.999Z",
+     "game": null,
+     "id": "f4f38331-8e23-49c8-ae88-48f690c8528e",
+     "name": "Pokémon Night Out Campaign",
+     "rewardGroups": [
+      {
+       "id": "935f94df-b78d-11f1-b88f-0a58a9feac02",
+       "lane": null,
+       "name": "Duskball",
+       "progressCriteria": {
+        "isAutoProgressable": true,
+        "isRepeatable": false,
+        "repeatableConfig": null,
+        "requirementType": "SUB",
+        "requirements": {
+         "minutesWatched": null,
+         "subs": 1,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "POOL",
+         "id": "59fcee3b-b7b0-11f1-9c20-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Pokémon Night Out Themed Poke Ball"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 0,
+        "currentWindow": null,
+        "grantCount": 0,
+        "nextEligibleAt": null,
+        "status": "CLAIMABLE"
+       },
+       "track": null
+      }
+     ],
+     "startAt": "2026-10-16T17:00:00Z"
+    },
+    {
+     "brandName": "Apple",
+     "endAt": "2026-11-03T19:59:59.999Z",
+     "game": null,
+     "id": "b5557155-92cd-49d4-afce-5661565b8898",
+     "name": "Ted Lasso Badges",
+     "rewardGroups": [
+      {
+       "id": "8c554b7a-c816-11f1-8925-0a58a9feac02",
+       "lane": null,
+       "name": "Ted Lasso Badges",
+       "progressCriteria": {
+        "isAutoProgressable": true,
+        "isRepeatable": false,
+        "repeatableConfig": null,
+        "requirementType": "SUB",
+        "requirements": {
+         "minutesWatched": null,
+         "subs": 1,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "c410a5c7-c8f1-11f1-8596-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "BelieveInRichmond Badge"
+        },
+        {
+         "distributionType": "BADGE",
+         "id": "593778ff-c8f1-11f1-bbe7-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "BeAGoldfish Badge"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": null,
+        "currentWindow": null,
+        "grantCount": 0,
+        "nextEligibleAt": null,
+        "status": "IN_PROGRESS"
+       },
+       "track": null
+      }
+     ],
+     "startAt": "2026-10-20T19:00:00Z"
+    },
+    {
+     "brandName": "Pokemon",
+     "endAt": "2026-11-01T07:00:00Z",
+     "game": null,
+     "id": "19f00aac-6679-4e10-b36c-881beb654e52",
+     "name": "First Partners Collection",
+     "rewardGroups": [
+      {
+       "id": "21347c82-944d-4607-9903-c4457001cb33",
+       "lane": null,
+       "name": "Great Ball",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": true,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "60456d93-9661-11f1-9755-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Charmander"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 20,
+        "currentWindow": {
+         "expiresAt": "2026-08-31T21:03:06Z",
+         "startedAt": "2026-08-30T21:03:06Z"
+        },
+        "grantCount": 3,
+        "nextEligibleAt": null,
+        "status": "CLAIMED"
+       },
+       "track": "balls#9ff135eb-d0c5-404f-8e37-bffbdcf15436"
+      },
+      {
+       "id": "c9ff5089-8ef9-4281-90eb-1ebff954f30a",
+       "lane": null,
+       "name": "Great Ball",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": true,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "53c2558e-9661-11f1-8d10-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Bulbasaur"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 20,
+        "currentWindow": {
+         "expiresAt": "2026-08-27T20:06:09Z",
+         "startedAt": "2026-08-26T20:06:09Z"
+        },
+        "grantCount": 3,
+        "nextEligibleAt": null,
+        "status": "CLAIMED"
+       },
+       "track": "balls#9ff135eb-d0c5-404f-8e37-bffbdcf15436"
+      },
+      {
+       "id": "ca444133-903a-4bc7-a440-98664760bc18",
+       "lane": null,
+       "name": "Great Ball",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": true,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "6fb2b2bf-9661-11f1-b7ec-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Squirtle"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 20,
+        "currentWindow": {
+         "expiresAt": "2026-08-29T20:32:02Z",
+         "startedAt": "2026-08-28T20:32:02Z"
+        },
+        "grantCount": 3,
+        "nextEligibleAt": null,
+        "status": "CLAIMED"
+       },
+       "track": "balls#9ff135eb-d0c5-404f-8e37-bffbdcf15436"
+      }
+     ],
+     "startAt": "2026-08-24T17:00:00Z"
+    },
+    {
+     "brandName": "",
+     "endAt": "2027-01-30T22:59:59.999Z",
+     "game": null,
+     "id": "3e7f0c98-893c-47a7-9044-1c61173b8f94",
+     "name": "Pokemon Evolutions",
+     "rewardGroups": [
+      {
+       "id": "0b44a09e-b792-11f1-8749-0a58a9feac02",
+       "lane": "5130dfac-b7a5-11f1-93ac-0a58a9feac02",
+       "name": "Haunter",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": false,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "61f46ca0-b7a5-11f1-af88-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Haunter"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 20,
+        "currentWindow": {
+         "expiresAt": "2026-10-22T21:22:15Z",
+         "startedAt": "2026-10-21T21:22:15Z"
+        },
+        "grantCount": 3,
+        "nextEligibleAt": null,
+        "status": "CLAIMED"
+       },
+       "track": "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+      },
+      {
+       "id": "0ef58891-b792-11f1-b0dd-0a58a9feac02",
+       "lane": "5130dfac-b7a5-11f1-93ac-0a58a9feac02",
+       "name": "Gengar",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": false,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "6c2583b2-b7a5-11f1-9a6f-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Gengar"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 2,
+        "currentWindow": {
+         "expiresAt": "2026-10-22T21:43:15Z",
+         "startedAt": "2026-10-21T21:43:15Z"
+        },
+        "grantCount": 0,
+        "nextEligibleAt": null,
+        "status": "IN_PROGRESS"
+       },
+       "track": "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+      },
+      {
+       "id": "574a2f66-b3b0-11f1-937c-0a58a9feac02",
+       "lane": "60456d93-9661-11f1-9755-0a58a9feac02",
+       "name": "Charmeleon",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": false,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "80c2625f-b3b0-11f1-b4f9-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Charmeleon"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 20,
+        "currentWindow": {
+         "expiresAt": "2026-10-22T19:43:46Z",
+         "startedAt": "2026-10-21T19:43:46Z"
+        },
+        "grantCount": 3,
+        "nextEligibleAt": null,
+        "status": "CLAIMED"
+       },
+       "track": "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+      },
+      {
+       "id": "666a2011-b78d-11f1-8d96-0a58a9feac02",
+       "lane": "60456d93-9661-11f1-9755-0a58a9feac02",
+       "name": "Charizard",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": false,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "c305b744-b790-11f1-9c20-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Charizard"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 0,
+        "currentWindow": null,
+        "grantCount": 0,
+        "nextEligibleAt": null,
+        "status": "IN_PROGRESS"
+       },
+       "track": "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+      },
+      {
+       "id": "76a7521f-b78d-11f1-9a2a-0a58a9feac02",
+       "lane": "53c2558e-9661-11f1-8d10-0a58a9feac02",
+       "name": "Venusaur",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": false,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "b50ac496-b790-11f1-af88-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Venusaur"
+        }
+       ],
+       "self": null,
+       "track": "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+      },
+      {
+       "id": "7ffcdd67-b7a0-11f1-99c5-0a58a9feac02",
+       "lane": "7e978af0-9661-11f1-b03f-0a58a9feac02",
+       "name": "Pikachu",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": false,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "6fa2245b-b7a0-11f1-b1c3-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Pikachu"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 20,
+        "currentWindow": {
+         "expiresAt": "2026-10-19T19:09:44Z",
+         "startedAt": "2026-10-18T19:09:44Z"
+        },
+        "grantCount": 3,
+        "nextEligibleAt": null,
+        "status": "CLAIMED"
+       },
+       "track": "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+      },
+      {
+       "id": "80c7bee0-b78d-11f1-9079-0a58a9feac02",
+       "lane": "6fb2b2bf-9661-11f1-b7ec-0a58a9feac02",
+       "name": "Wartortle",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": false,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "d2bdd8bb-b790-11f1-b2a2-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Wartortle"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 20,
+        "currentWindow": {
+         "expiresAt": "2026-10-22T19:14:43Z",
+         "startedAt": "2026-10-21T19:14:43Z"
+        },
+        "grantCount": 2,
+        "nextEligibleAt": null,
+        "status": "IN_PROGRESS"
+       },
+       "track": "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+      },
+      {
+       "id": "83c16151-b3ac-11f1-9193-0a58a9feac02",
+       "lane": "53c2558e-9661-11f1-8d10-0a58a9feac02",
+       "name": "Ivysaur",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": false,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "8cb4c678-b3aa-11f1-bb5f-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Ivysaur"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 20,
+        "currentWindow": {
+         "expiresAt": "2026-10-18T18:22:16Z",
+         "startedAt": "2026-10-17T18:22:16Z"
+        },
+        "grantCount": 1,
+        "nextEligibleAt": null,
+        "status": "IN_PROGRESS"
+       },
+       "track": "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+      },
+      {
+       "id": "8520b9d2-b78d-11f1-9b28-0a58a9feac02",
+       "lane": "6fb2b2bf-9661-11f1-b7ec-0a58a9feac02",
+       "name": "Blastoise",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": false,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "daff37ac-b790-11f1-8063-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Blastoise"
+        }
+       ],
+       "self": null,
+       "track": "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+      }
+     ],
+     "startAt": "2026-10-16T17:00:00Z"
+    },
+    {
+     "brandName": "Pokemon",
+     "endAt": "2026-11-23T22:59:59.999Z",
+     "game": null,
+     "id": "26547ffd-3b53-474c-b9ba-766fe4dfca83",
+     "name": "Pokémon Night Out Campaign",
+     "rewardGroups": [
+      {
+       "id": "a19378c9-b78e-11f1-b8d5-0a58a9feac02",
+       "lane": null,
+       "name": "Gastly",
+       "progressCriteria": {
+        "isAutoProgressable": false,
+        "isRepeatable": true,
+        "repeatableConfig": {
+         "isLastChanceExtensionEnabled": false,
+         "repeatableTimes": 3,
+         "resetIntervalSeconds": 86400,
+         "shouldCompleteAllRepeatsToEarn": true
+        },
+        "requirementType": "WATCH",
+        "requirements": {
+         "minutesWatched": 20,
+         "subs": null,
+         "turboSubs": null
+        }
+       },
+       "rewards": [
+        {
+         "distributionType": "BADGE",
+         "id": "5130dfac-b7a5-11f1-93ac-0a58a9feac02",
+         "isAccountConnected": false,
+         "name": "Gastly"
+        }
+       ],
+       "self": {
+        "currentMinutesWatched": 20,
+        "currentWindow": {
+         "expiresAt": "2026-10-19T19:09:44Z",
+         "startedAt": "2026-10-18T19:09:44Z"
+        },
+        "grantCount": 3,
+        "nextEligibleAt": null,
+        "status": "CLAIMED"
+       },
+       "track": "balls#9ff135eb-d0c5-404f-8e37-bffbdcf15436"
+      }
+     ],
+     "startAt": "2026-10-16T17:00:00Z"
+    }
+   ]
+  }
+ },
+ "ProgressionTrackSelections": {
+  "data": {
+   "trackSelections": [
+    {
+     "id": "pokemon#aebee668-75ca-4626-99f5-168d369d217b",
+     "lane": "53c2558e-9661-11f1-8d10-0a58a9feac02",
+     "track": "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+    }
+   ]
+  }
+ },
+ "_comment": "LIVE capture 2026-10-22 ~06:35Z, channel twitchplayspokemon (56648155), read-only, redacted (no user id/login/token present). Inventory had 0 of these campaigns in dropCampaignsInProgress."
+}
