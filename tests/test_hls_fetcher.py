@@ -49,24 +49,35 @@ class FakeResponse(object):
         pass
 
 
+class FakeHead(object):
+    status_code = 200
+    headers = {"Content-Type": "video/mp2t", "Content-Length": "72380"}
+
+
 class FakeSession(object):
     def __init__(self):
         self.urls = []
+        self.heads = []
 
     def get(self, url, headers=None, timeout=None, stream=False):
         self.urls.append(url)
         return FakeResponse(url)
 
+    def head(self, url, headers=None, timeout=None):
+        self.heads.append(url)
+        return FakeHead()
+
     def segments(self):
         return [u for u in self.urls if u.endswith(".ts")]
 
 
-def fetcher(mode="minute", budget=300 * 1048576, channels=(), seed=1):
+def fetcher(mode="minute", budget=300 * 1048576, channels=(), seed=1, sleeps=None):
     session = FakeSession()
     f = HLSFetcher(
         lambda login: f"https://usher.test/{login}/master",
         mode=mode, budget=budget, channels=list(channels), session=session,
-        rng=random.Random(seed), clock=lambda: 0.0, sleep=lambda s: None,
+        rng=random.Random(seed), clock=lambda: 0.0,
+        sleep=(sleeps.append if sleeps is not None else (lambda s: None)),
         threaded=False,
     )
     return f, session
@@ -164,3 +175,60 @@ def test_dropped_target_stops_being_fetched():
     f.set_targets([])
     run(f, 300, start=1_761_200_000.0)
     assert len(session.segments()) == count
+
+
+# ------------------------------- head-all -------------------------------- #
+def test_head_all_interval_is_random_within_15_to_25_seconds():
+    f, _ = fetcher(mode="head-all")
+    draws = [f.next_interval() for _ in range(500)]
+    assert all(15.0 <= d <= 25.0 for d in draws)
+    assert len(set(draws)) > 400 and statistics.pstdev(draws) > 2
+
+
+def test_head_all_heads_every_segment_with_small_random_gaps():
+    sleeps = []
+    f, session = fetcher(mode="head-all", sleeps=sleeps)
+    f.set_targets(["a"])
+    f.streams["a"]["next_due"] = 0
+    assert f.tick(1_761_100_000.0) == 1
+    assert session.heads == hls.all_segments(MEDIA) == [
+        "https://example.test/seg-1.ts", "https://example.test/seg-2.ts"]
+    assert session.segments() == []  # no segment body is downloaded
+    head_gaps = sleeps[-len(session.heads):]
+    assert all(0.1 <= g <= 0.8 for g in head_gaps) and len(set(head_gaps)) == 2
+    assert f.requests_today == 2 + len(session.heads)  # master + media + HEADs
+
+
+def test_head_all_rounds_are_independent_per_stream():
+    f, session = fetcher(mode="head-all")
+    f.set_targets(["a", "b"])
+    rounds = {"a": [], "b": []}
+    t, start = 1_761_100_000.0, 1_761_100_000.0
+    while t < start + 1800:
+        before = {k: v["next_due"] for k, v in f.streams.items()}
+        f.tick(t)
+        for login, state in f.streams.items():
+            if state["next_due"] != before[login]:
+                rounds[login].append(t)
+        t += 0.5
+    for login in rounds:
+        gaps = [b - a for a, b in zip(rounds[login], rounds[login][1:])]
+        assert gaps and all(14.5 <= g <= 25.5 for g in gaps)
+        assert len({round(g) for g in gaps}) > 5
+    assert rounds["a"] != rounds["b"]
+
+
+def test_head_all_budget_stops_requests():
+    f, session = fetcher(mode="head-all", budget=2 * len(MEDIA))
+    f.set_targets(["a"])
+    run(f, 1800)
+    heads = len(session.heads)
+    run(f, 1800, start=1_761_100_000.0 + 1800)
+    assert len(session.heads) == heads  # stopped
+
+
+def test_head_all_off_makes_no_requests():
+    f, session = fetcher(mode="off")
+    f.set_targets(["a"])
+    run(f, 600)
+    assert session.urls == [] and session.heads == []

@@ -41,3 +41,29 @@ def test_other_channels_are_not_relevant():
     assert schedule.is_drop_relevant(streamer(claim=False), {"56648155"}) is False
     assert schedule.is_drop_relevant(streamer(online=False), {"56648155"}) is False
     assert schedule.is_drop_relevant(streamer(channel_id=""), {""}) is False
+
+
+
+def test_drops_order_puts_reward_choice_channels_first_when_enabled():
+    streamers = [
+        streamer(drops=True, channel_id="game1"),
+        streamer(drops=True, channel_id="game2"),
+        streamer(channel_id="tpp"),
+        streamer(channel_id="nothing"),
+    ]
+    lanes = {"tpp"}
+    assert schedule.drops_order(streamers, [0, 1, 2, 3], lanes, True) == [2, 0, 1]
+    assert schedule.drops_order(streamers, [0, 1, 2, 3], lanes, False) == [0, 1, 2]
+    # With 2 watch slots the reward-choice channel now gets one.
+    assert 2 in schedule.drops_order(streamers, [0, 1, 2, 3], lanes, True)[:2]
+
+
+def test_lane_priority_flag(monkeypatch):
+    monkeypatch.delenv(schedule.LANE_PRIORITY_ENV, raising=False)
+    assert schedule.lane_priority_enabled("on") is True
+    assert schedule.lane_priority_enabled("dry-run") is False
+    assert schedule.lane_priority_enabled("off") is False
+    monkeypatch.setenv(schedule.LANE_PRIORITY_ENV, "off")
+    assert schedule.lane_priority_enabled("on") is False
+    monkeypatch.setenv(schedule.LANE_PRIORITY_ENV, "on")
+    assert schedule.lane_priority_enabled("off") is True
