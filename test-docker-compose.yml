@@ -31,6 +31,13 @@ services:
       - TCPM_HLS_SEGMENT_FETCH=${TCPM_HLS_SEGMENT_FETCH:-off}
       - TCPM_HLS_DAILY_BUDGET_MB=${TCPM_HLS_DAILY_BUDGET_MB:-300}
       - TCPM_HLS_SEGMENT_CHANNELS=${TCPM_HLS_SEGMENT_CHANNELS:-}
+      # Free watch-time badges on not-followed channels (classes/FreeBadges.py):
+      # off | on. One at a time, then a random 2.5-5 day cooldown.
+      - TCPM_FREE_BADGES=${TCPM_FREE_BADGES:-off}
+      # Separate weekend timer (10-25 h) inside a weekly window, local time.
+      - TCPM_FREE_BADGES_WEEKEND=${TCPM_FREE_BADGES_WEEKEND:-off}
+      - TCPM_FREE_BADGES_WEEKEND_WINDOW=${TCPM_FREE_BADGES_WEEKEND_WINDOW:-fri 18:00-sun 22:00}
+      - TCPM_FREE_BADGES_WEEKEND_TZ=${TCPM_FREE_BADGES_WEEKEND_TZ:-Europe/Berlin}
     volumes:
      # - './data/analytics:/usr/src/app/analytics'
      # - './data/cookies:/usr/src/app/cookies'

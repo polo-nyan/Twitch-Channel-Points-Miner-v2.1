@@ -612,6 +612,11 @@ Some multi-day channel campaigns let you choose one of several rewards, and only
 - `TCPM_DROP_LANE_SWITCH=on` also changes the selection. It selects only a reward that can still make progress, and it does not change the selection again until that reward is done.
 - `TCPM_DROP_LANE_PREFERENCE=Bulbasaur,Squirtle` (optional) sets the order. Rewards not in the list follow in the order Twitch returns them.
 
+#### Free watch-time badges
+Many global badges are drop campaigns with a badge reward: "watch any stream in category X for N minutes". With `TCPM_FREE_BADGES=on` (default off), the miner watches one random live, drops-enabled channel for such a campaign when no configured streamer plays the game. It uses at most one of the two watch slots, after reward-choice channels and game-drop streams. Only badge-only campaigns that need no linked game account are used, and a campaign's channel list is respected. One badge on a not-followed channel at a time: when it is earned or abandoned, a random cooldown of 2.5 to 5 days starts. The state is kept in `analytics/free_badges.json`, so a restart does not reset it.
+
+`TCPM_FREE_BADGES_WEEKEND=on` (default off) adds a separate weekend timer. Inside the window `TCPM_FREE_BADGES_WEEKEND_WINDOW` (default `fri 18:00-sun 22:00`, local time in `TCPM_FREE_BADGES_WEEKEND_TZ`, default `Europe/Berlin`), a pick uses the weekend timer, and its cooldown is a random 10 to 25 hours. Weekend picks do not use or reset the weekday timer, and the weekday timer does not block them. A pick only starts inside the window. A weekend badge that is still in progress when the window closes is left to finish.
+
 ### BetSettings
 | Key                	| Type            	| Default 	| Description                                                                                                    	                                                                          |
 |--------------------	|-----------------	|---------	|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
