@@ -3,6 +3,7 @@
 channels, with the operator's 2.5-5 day cooldown)."""
 
 import copy
+import logging
 import json
 import random
 from types import SimpleNamespace
@@ -371,3 +372,104 @@ def test_weekend_env_switch(monkeypatch):
     assert fb.weekend_from_env().start == 5 * 1440 + 600
     monkeypatch.setenv(fb.WINDOW_ENV, "nonsense")
     assert fb.weekend_from_env() is None
+
+
+# ------------------------- cycle with streamdatabase ----------------------- #
+bgl = load_module(
+    "TwitchChannelPointsMiner.classes.BadgeGames",
+    "TwitchChannelPointsMiner/classes/BadgeGames.py",
+)
+
+
+class CountingOps(object):
+    """Fake GQL side of a free-badge cycle; counts requests (details: per id)."""
+
+    def __init__(self, campaigns):
+        self.campaigns = {c["id"]: c for c in campaigns}
+        self.requests = 0
+
+    def directory(self, slug):
+        self.requests += 1
+        return [(f"{slug}{i}", f"{slug}login{i}") for i in range(10)]
+
+    def game(self, name):
+        self.requests += 1
+        return name.lower()
+
+    def channel_campaigns(self, channel_id):
+        self.requests += 1
+        return list(self.campaigns)
+
+    def details(self, ids):
+        self.requests += len(ids)
+        return [self.campaigns[i] for i in ids if i in self.campaigns]
+
+
+class StaticList(object):
+    def __init__(self, games):
+        self._games, self.calls = games, 0
+        self.state = {"slugs": {}}
+
+    def games(self):
+        self.calls += 1
+        return list(self._games)
+
+    def fetched_text(self):
+        return "2026-10-22 12:43 UTC"
+
+    def slug(self, name, resolve, budget):
+        return bgl.BadgeGameList.slug(self, name, resolve, budget)
+
+    def save(self):
+        pass
+
+    clock = staticmethod(lambda: NOW)
+
+
+def test_cycle_picks_a_channel_within_15_requests(tmp_path):
+    p = planner(tmp_path)
+    ops = CountingOps([CAMPAIGN])
+    games = StaticList(["Witchspire", "Alien Isolation", "Roblox", "PAYDAY 3"])
+    login, summary, used = fb.free_badge_cycle(p, games, ops, [], [], NOW, set(), sleep=lambda s: None)
+    assert login is not None and p.active["timer"] == "weekday"
+    assert used == ops.requests <= bgl.MAX_REQUESTS
+    assert "channels probed" in summary
+
+
+def test_cooldown_skip_makes_zero_requests(tmp_path):
+    p = planner(tmp_path)
+    p.state["cooldown_until"] = NOW + 3 * DAY
+    ops = CountingOps([CAMPAIGN])
+    games = StaticList(["Witchspire"])
+    login, summary, used = fb.free_badge_cycle(p, games, ops, [], [], NOW, set(), sleep=lambda s: None)
+    assert (login, used, ops.requests, games.calls) == (None, 0, 0, 0)
+    assert summary == "both timers cooling down"
+
+
+def test_no_list_means_nothing_eligible_without_requests(tmp_path, caplog):
+    p = planner(tmp_path)
+    ops = CountingOps([CAMPAIGN])
+    with caplog.at_level(logging.INFO, logger=fb.__name__):
+        login, summary, used = fb.free_badge_cycle(p, StaticList([]), ops, [], [], NOW, set())
+    assert login is None and used == 0 and ops.requests == 0
+    assert any("nothing eligible (no badge-game list)" in r.getMessage() for r in caplog.records)
+
+
+def test_active_badge_costs_one_detail_request(tmp_path):
+    p = planner(tmp_path)
+    ops = CountingOps([CAMPAIGN])
+    fb.free_badge_cycle(p, StaticList(["Witchspire"]), ops, [], [], NOW, set(), sleep=lambda s: None)
+    ops.requests = 0
+    login, summary, used = fb.free_badge_cycle(p, StaticList(["Witchspire"]), ops, [], [], NOW + 1800, set())
+    assert login is not None and used == ops.requests == 1 and summary == "tracking the active badge"
+
+
+def test_ineligible_campaigns_are_remembered_and_skipped(tmp_path):
+    p = planner(tmp_path)
+    paid = campaign(id="not-badge")
+    paid["timeBasedDrops"] = [dict(paid["timeBasedDrops"][0], benefitEdges=[
+        {"benefit": {"id": "x", "name": "Skin", "distributionType": "DIRECT_ENTITLEMENT"}}])]
+    ops = CountingOps([paid])
+    skip = set()
+    login, _, _ = fb.free_badge_cycle(p, StaticList(["Witchspire"]), ops, [], [], NOW, skip, sleep=lambda s: None)
+    assert login is None and skip == {"not-badge"}
