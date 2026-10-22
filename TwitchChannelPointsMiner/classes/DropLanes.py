@@ -232,9 +232,10 @@ class DropLaneSwitcher(object):
         self.attempts = {}  # (track, lane) -> select attempts
         self.finished = set()  # channel ids with nothing left to earn
         self.logged = set()  # one-time log keys
-        # Channel ids with an unfinished reward-choice campaign. A channel
-        # campaign is allowed on its channel by definition, so these channels
-        # are drop-relevant (used by HLSFetcher).
+        # Channel ids where watching now adds progress to a selected
+        # reward-choice lane. A channel campaign is allowed on its channel by
+        # definition, so these channels are drop-relevant (watch priority
+        # DROPS and HLSFetcher, see DropSchedule.is_drop_relevant).
         self.lane_channels = set()
 
     def __log_once(self, key, level, message):
@@ -267,7 +268,6 @@ class DropLaneSwitcher(object):
         if not tracks:
             self.lane_channels.discard(channel_id)
             return []
-        self.lane_channels.add(channel_id)
 
         selections = _data(
             post_gql_request(
@@ -285,11 +285,15 @@ class DropLaneSwitcher(object):
 
         changes = []
         finished_tracks = 0
+        # True when watching this channel now adds progress to a selected lane.
+        progress_possible = False
         for track, lanes in tracks.items():
             action, lane = decide(lanes, selected.get(track), self.preference, now)
             if action == "finished":
                 finished_tracks += 1
                 continue
+            if action == "keep":
+                progress_possible = True
             if action != "switch":
                 if self.mode == "dry-run":
                     current = selected.get(track)
@@ -348,12 +352,17 @@ class DropLaneSwitcher(object):
                     extra={"emoji": ":package:"},
                 )
                 changes.append(key)
+                progress_possible = True
             else:
                 error = result.get("error") if isinstance(result, dict) else result
                 logger.warning(
                     f"Reward choice on {channel_name}: selecting {name} failed: {error}"
                 )
 
+        if progress_possible:
+            self.lane_channels.add(channel_id)
+        else:
+            self.lane_channels.discard(channel_id)
         if finished_tracks == len(tracks):
             self.finished.add(channel_id)
             self.lane_channels.discard(channel_id)

@@ -32,6 +32,10 @@ from TwitchChannelPointsMiner.classes.Exceptions import (
 )
 from TwitchChannelPointsMiner.classes.DropClaims import DropClaimTracker
 from TwitchChannelPointsMiner.classes.DropLanes import DropLaneSwitcher
+from TwitchChannelPointsMiner.classes.DropSchedule import (
+    campaigns_refresh_due,
+    is_drop_relevant,
+)
 from TwitchChannelPointsMiner.classes.HLSFetcher import HLSFetcher
 from TwitchChannelPointsMiner.classes.GQLHealer import GQLHealer, stale_operations
 from TwitchChannelPointsMiner.classes.Settings import (
@@ -592,7 +596,9 @@ class Twitch(object):
 
                     elif prior == Priority.DROPS:
                         for index in streamers_index:
-                            if streamers[index].drops_condition() is True:
+                            if is_drop_relevant(
+                                streamers[index], self.drop_lanes.lane_channels
+                            ):
                                 streamers_watching.add(index)
                                 if remaining_watch_amount() <= 0:
                                     break
@@ -620,9 +626,9 @@ class Twitch(object):
                         [
                             streamers[index].username
                             for index in streamers_watching
-                            if streamers[index].drops_condition() is True
-                            or streamers[index].channel_id
-                            in self.drop_lanes.lane_channels
+                            if is_drop_relevant(
+                                streamers[index], self.drop_lanes.lane_channels
+                            )
                         ]
                     )
 
@@ -1153,14 +1159,9 @@ class Twitch(object):
         while self.running:
             try:
                 # Get update from dashboard each 60minutes
-                if (
-                    campaigns_update == 0
-                    # or ((time.time() - campaigns_update) / 60) > 60
-                    # TEMPORARY AUTO DROP CLAIMING FIX
-                    # 30 minutes instead of 60 minutes
-                    or ((time.time() - campaigns_update) / 30) > 30
-                    #####################################
-                ):
+                # Every 30 minutes (upstream's TEMPORARY AUTO DROP CLAIMING FIX
+                # wanted 30 instead of 60; its check fired after 15).
+                if campaigns_refresh_due(campaigns_update, time.time()):
                     campaigns_update = time.time()
 
                     # TEMPORARY AUTO DROP CLAIMING FIX
