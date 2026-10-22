@@ -77,6 +77,7 @@ class Twitch(object):
         "drop_lanes",
         "hls_fetcher",
         "lane_priority",
+        "lane_watch",
         "twilight_build_id_pattern",
         "gql_healer",
         "gql_healer_next_refresh",
@@ -103,6 +104,7 @@ class Twitch(object):
         self.drop_lanes = DropLaneSwitcher()
         # Reward-choice channels ahead of game-drop streams (TCPM_DROP_LANE_PRIORITY).
         self.lane_priority = lane_priority_enabled(self.drop_lanes.mode)
+        self.lane_watch = {}  # track -> channel id picked for it (sticky)
         # Real HLS segment downloads for drop progress (TCPM_HLS_SEGMENT_FETCH).
         self.hls_fetcher = HLSFetcher(self.playlist_url_for, user_agent=self.user_agent)
         self.twilight_build_id_pattern = re.compile(
@@ -605,6 +607,7 @@ class Twitch(object):
                             streamers_index,
                             self.drop_lanes.lane_channels,
                             self.lane_priority,
+                            self.lane_watch,
                         ):
                             streamers_watching.add(index)
                             if remaining_watch_amount() <= 0:

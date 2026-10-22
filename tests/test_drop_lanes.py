@@ -285,7 +285,7 @@ def test_lane_channels_holds_channels_where_watching_adds_progress():
     # Live state: Ivysaur selected and can make progress -> relevant.
     gql = FakeGQL(LIVE["DropChannelCampaignsProgress"], LIVE["ProgressionTrackSelections"])
     switcher.run("56648155", "twitchplayspokemon", gql, now=LIVE_NOW)
-    assert switcher.lane_channels == {"56648155"}
+    assert switcher.lane_channels == {"56648155": frozenset({TRACK})}
 
     # Every lane done for today -> watching adds nothing -> not relevant.
     today = {"status": "IN_PROGRESS", "currentMinutesWatched": 20, "grantCount": 1,
@@ -303,7 +303,7 @@ def test_lane_channels_holds_channels_where_watching_adds_progress():
 
 def test_lane_channels_drops_finished_channels():
     switcher = DropLaneSwitcher(mode="on", preference=[])
-    switcher.lane_channels.add("1")
+    switcher.lane_channels["1"] = frozenset({"track-1"})
     done = campaign(**{g: finished() for g in ("group-a", "group-b", "group-c")})
     switcher.run("1", "tpp", FakeGQL(done, selection("lane-a")), now=NOW)
     assert "1" not in switcher.lane_channels
