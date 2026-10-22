@@ -278,3 +278,32 @@ def test_one_time_log_names_the_caller(caplog):
     with caplog.at_level(logging.INFO, logger=lanes_module.__name__):
         DropLaneSwitcher(mode="dry-run", preference=[]).run("1", "tpp", gql, now=NOW)
     assert [r.funcName for r in caplog.records] == ["run"]
+
+
+def test_lane_channels_holds_channels_where_watching_adds_progress():
+    switcher = DropLaneSwitcher(mode="on", preference=[])
+    # Live state: Ivysaur selected and can make progress -> relevant.
+    gql = FakeGQL(LIVE["DropChannelCampaignsProgress"], LIVE["ProgressionTrackSelections"])
+    switcher.run("56648155", "twitchplayspokemon", gql, now=LIVE_NOW)
+    assert switcher.lane_channels == {"56648155"}
+
+    # Every lane done for today -> watching adds nothing -> not relevant.
+    today = {"status": "IN_PROGRESS", "currentMinutesWatched": 20, "grantCount": 1,
+             "nextEligibleAt": None,
+             "currentWindow": {"startedAt": "2026-10-22T00:00:00Z", "expiresAt": "2026-10-23T00:00:00Z"}}
+    gql = FakeGQL(campaign(**{"group-b": today, "group-c": today}), selection("lane-a"))
+    switcher.run("1", "tpp", gql, now=NOW)
+    assert "1" not in switcher.lane_channels
+
+    # A successful switch makes the channel relevant.
+    gql = FakeGQL(CAMPAIGN, selection("lane-a"))
+    switcher.run("2", "other", gql, now=NOW)
+    assert "2" in switcher.lane_channels
+
+
+def test_lane_channels_drops_finished_channels():
+    switcher = DropLaneSwitcher(mode="on", preference=[])
+    switcher.lane_channels.add("1")
+    done = campaign(**{g: finished() for g in ("group-a", "group-b", "group-c")})
+    switcher.run("1", "tpp", FakeGQL(done, selection("lane-a")), now=NOW)
+    assert "1" not in switcher.lane_channels
