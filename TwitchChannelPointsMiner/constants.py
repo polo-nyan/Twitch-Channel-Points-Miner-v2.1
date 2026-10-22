@@ -3,7 +3,8 @@ URL = "https://www.twitch.tv"               # Browser, Apps
 # URL = "https://m.twitch.tv"               # Mobile Browser
 # URL = "https://android.tv.twitch.tv"      # TV
 IRC = "irc.chat.twitch.tv"
-IRC_PORT = 6667
+IRC_PORT = 6697                             # TLS, so the OAuth token is never sent in clear
+IRC_PLAINTEXT_PORT = 6667                   # Only with TCPM_IRC_PLAINTEXT_FALLBACK=1, see Chat.py
 WEBSOCKET = "wss://pubsub-edge.twitch.tv/v1"
 CLIENT_ID = "ue6666qo983tsx6so1t0vnawi233wa"        # TV
 # CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko"      # Browser
