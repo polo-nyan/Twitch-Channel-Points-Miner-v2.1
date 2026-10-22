@@ -606,6 +606,12 @@ Allowed values for `chat` are:
 
 The chat connection uses TLS (`irc.chat.twitch.tv:6697`), so the OAuth token is not sent in clear. If your network blocks TLS on that port, set `TCPM_IRC_PLAINTEXT_FALLBACK=1`: when the first TLS connection of a chat fails, the miner logs a WARNING and uses plaintext port 6667. The fallback is off by default.
 
+#### Reward choice in channel drop campaigns
+Some multi-day channel campaigns let you choose one of several rewards, and only the selected reward gets watch progress. When the selected reward is done for the day, progress is lost until you select another one. The miner can make that selection for online channels with `claim_drops` on. It is off by default:
+- `TCPM_DROP_LANE_SWITCH=dry-run` reads the campaigns and logs the selection it would make.
+- `TCPM_DROP_LANE_SWITCH=on` also changes the selection. It selects only a reward that can still make progress, and it does not change the selection again until that reward is done.
+- `TCPM_DROP_LANE_PREFERENCE=Bulbasaur,Squirtle` (optional) sets the order. Rewards not in the list follow in the order Twitch returns them.
+
 ### BetSettings
 | Key                	| Type            	| Default 	| Description                                                                                                    	                                                                          |
 |--------------------	|-----------------	|---------	|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

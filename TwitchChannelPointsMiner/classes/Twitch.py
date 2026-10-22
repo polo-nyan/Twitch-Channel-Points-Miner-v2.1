@@ -31,6 +31,7 @@ from TwitchChannelPointsMiner.classes.Exceptions import (
     StreamerIsOfflineException,
 )
 from TwitchChannelPointsMiner.classes.DropClaims import DropClaimTracker
+from TwitchChannelPointsMiner.classes.DropLanes import DropLaneSwitcher
 from TwitchChannelPointsMiner.classes.GQLHealer import GQLHealer, stale_operations
 from TwitchChannelPointsMiner.classes.Settings import (
     Events,
@@ -66,6 +67,7 @@ class Twitch(object):
         # "integrity_expire",
         "client_session",
         "client_version",
+        "drop_lanes",
         "twilight_build_id_pattern",
         "gql_healer",
         "gql_healer_next_refresh",
@@ -88,6 +90,8 @@ class Twitch(object):
         # self.integrity_expire = 0
         self.client_session = token_hex(16)
         self.client_version = CLIENT_VERSION
+        # Reward choice in multi-day channel campaigns (TCPM_DROP_LANE_SWITCH).
+        self.drop_lanes = DropLaneSwitcher()
         self.twilight_build_id_pattern = re.compile(
             r'window\.__twilightBuildID\s*=\s*"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"'
         )
@@ -1090,6 +1094,21 @@ class Twitch(object):
                             drop.is_claimed = self.claim_drop(drop)
                             time.sleep(random.uniform(5, 10))
 
+    def update_drop_lanes(self, streamers):
+        """Select the next unearned reward in reward-choice campaigns on the
+        online channels that have drops enabled. See classes/DropLanes.py."""
+        if self.drop_lanes.mode == "off":
+            return
+        for streamer in streamers:
+            if (
+                streamer.is_online is True
+                and streamer.settings.claim_drops is True
+                and streamer.channel_id
+            ):
+                self.drop_lanes.run(
+                    streamer.channel_id, streamer.username, self.post_gql_request
+                )
+
     def sync_campaigns(self, streamers, chunk_size=3):
         campaigns_update = 0
         campaigns = []
@@ -1109,6 +1128,8 @@ class Twitch(object):
                     # TEMPORARY AUTO DROP CLAIMING FIX
                     self.claim_all_drops_from_inventory()
                     #####################################
+
+                    self.update_drop_lanes(streamers)
 
                     # Get full details from current ACTIVE campaigns
                     # Use dashboard so we can explore new drops not currently active in our Inventory

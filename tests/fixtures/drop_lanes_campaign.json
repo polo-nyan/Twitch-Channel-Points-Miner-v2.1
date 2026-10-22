@@ -1,0 +1,71 @@
+{
+  "_comment": "SYNTHETIC fixture, not a live capture. Shape follows the web client's DropChannelCampaignsProgress document (2026-10-22). Three lanes on one track: lane-a done for today, lane-b selected and in progress, lane-c not started (self is null). Replace with a redacted live response when one is recorded.",
+  "data": {
+    "channelDropCampaignsProgress": [
+      {
+        "id": "campaign-1",
+        "name": "Evolution",
+        "brandName": "Twitch Plays Pokemon",
+        "startAt": "2026-10-20T00:00:00Z",
+        "endAt": "2026-10-30T00:00:00Z",
+        "game": {"id": "1", "name": "Pokemon"},
+        "rewardGroups": [
+          {
+            "id": "group-a",
+            "name": "Haunter",
+            "track": "track-1",
+            "lane": "lane-a",
+            "progressCriteria": {
+              "requirementType": "WATCH",
+              "requirements": {"minutesWatched": 20, "subs": null, "turboSubs": null},
+              "isRepeatable": true,
+              "isAutoProgressable": false,
+              "repeatableConfig": {"repeatableTimes": 4, "resetIntervalSeconds": 86400, "isLastChanceExtensionEnabled": false, "shouldCompleteAllRepeatsToEarn": true}
+            },
+            "rewards": [{"id": "reward-a", "name": "Haunter", "distributionType": "BADGE", "isAccountConnected": true}],
+            "self": {"status": "IN_PROGRESS", "currentMinutesWatched": 20, "grantCount": 1, "nextEligibleAt": null, "currentWindow": {"startedAt": "2026-10-22T00:00:00Z", "expiresAt": "2026-10-23T00:00:00Z"}}
+          },
+          {
+            "id": "group-b",
+            "name": "Charmeleon",
+            "track": "track-1",
+            "lane": "lane-b",
+            "progressCriteria": {
+              "requirementType": "WATCH",
+              "requirements": {"minutesWatched": 20, "subs": null, "turboSubs": null},
+              "isRepeatable": true,
+              "isAutoProgressable": false,
+              "repeatableConfig": {"repeatableTimes": 4, "resetIntervalSeconds": 86400, "isLastChanceExtensionEnabled": false, "shouldCompleteAllRepeatsToEarn": true}
+            },
+            "rewards": [{"id": "reward-b", "name": "Charmeleon", "distributionType": "BADGE", "isAccountConnected": true}],
+            "self": {"status": "IN_PROGRESS", "currentMinutesWatched": 5, "grantCount": 0, "nextEligibleAt": null, "currentWindow": {"startedAt": "2026-10-22T00:00:00Z", "expiresAt": "2026-10-23T00:00:00Z"}}
+          },
+          {
+            "id": "group-c",
+            "name": "Squirtle",
+            "track": "track-1",
+            "lane": "lane-c",
+            "progressCriteria": {
+              "requirementType": "WATCH",
+              "requirements": {"minutesWatched": 20, "subs": null, "turboSubs": null},
+              "isRepeatable": true,
+              "isAutoProgressable": false,
+              "repeatableConfig": {"repeatableTimes": 4, "resetIntervalSeconds": 86400, "isLastChanceExtensionEnabled": false, "shouldCompleteAllRepeatsToEarn": true}
+            },
+            "rewards": [{"id": "reward-c", "name": "Squirtle", "distributionType": "BADGE", "isAccountConnected": true}],
+            "self": null
+          },
+          {
+            "id": "group-plain",
+            "name": "Plain watch drop, no track",
+            "track": null,
+            "lane": null,
+            "progressCriteria": {"requirementType": "WATCH", "requirements": {"minutesWatched": 30}, "isRepeatable": false, "isAutoProgressable": true, "repeatableConfig": null},
+            "rewards": [{"id": "reward-plain", "name": "Badge", "distributionType": "BADGE", "isAccountConnected": true}],
+            "self": {"status": "IN_PROGRESS", "currentMinutesWatched": 3, "grantCount": 0, "nextEligibleAt": null, "currentWindow": null}
+          }
+        ]
+      }
+    ]
+  }
+}
