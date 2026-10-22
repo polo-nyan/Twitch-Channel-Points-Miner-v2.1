@@ -271,3 +271,10 @@ def test_live_done_today_lane_is_available_after_its_window():
     lanes = live_lanes()[TRACK]
     after = datetime(2026, 10, 22, 19, 15, tzinfo=timezone.utc)
     assert lane_state(lanes[WARTORTLE], after) == "available"
+
+
+def test_one_time_log_names_the_caller(caplog):
+    gql = FakeGQL(CAMPAIGN, selection("lane-b"))
+    with caplog.at_level(logging.INFO, logger=lanes_module.__name__):
+        DropLaneSwitcher(mode="dry-run", preference=[]).run("1", "tpp", gql, now=NOW)
+    assert [r.funcName for r in caplog.records] == ["run"]
