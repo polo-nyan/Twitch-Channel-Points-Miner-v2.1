@@ -232,3 +232,71 @@ def test_head_all_off_makes_no_requests():
     f.set_targets(["a"])
     run(f, 600)
     assert session.urls == [] and session.heads == []
+
+
+
+class SimClock(object):
+    """Simulated time: sleep() advances it, as real requests would."""
+
+    def __init__(self, start):
+        self.t = start
+
+    def __call__(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += seconds
+
+
+def test_head_all_caps_a_round_at_the_newest_20_segments():
+    long_media = "#EXTM3U\n" + "".join(
+        f"#EXTINF:2.000,live\nhttps://example.test/seg-{i}.ts\n" for i in range(94))
+    f, session = fetcher(mode="head-all")
+    f.set_targets(["a"])
+    f.streams["a"]["next_due"] = 0
+    original_get = session.get
+
+    def get(url, headers=None, timeout=None, stream=False):
+        response = original_get(url, headers, timeout, stream)
+        if url.endswith(".m3u8"):
+            response.content = long_media.encode()
+            response.text = long_media
+        return response
+
+    session.get = get
+    f.tick(1_761_100_000.0)
+    assert len(session.heads) == hls.MAX_HEADS_PER_ROUND == 20
+    assert session.heads[-1] == "https://example.test/seg-93.ts"
+    assert session.heads[0] == "https://example.test/seg-74.ts"
+
+
+def test_head_all_pause_between_rounds_is_at_least_15_seconds():
+    clock = SimClock(1_761_100_000.0)
+    session = FakeSession()
+    f = HLSFetcher(
+        lambda login: f"https://usher.test/{login}/master",
+        mode="head-all", budget=300 * 1048576, channels=[], session=session,
+        rng=random.Random(3), clock=clock, sleep=clock.sleep, threaded=False,
+    )
+    # Slow segments: each HEAD costs 1 s on top of the random gap.
+    original_head = session.head
+
+    def slow_head(url, headers=None, timeout=None):
+        clock.t += 1.0
+        return original_head(url, headers, timeout)
+
+    session.head = slow_head
+    f.set_targets(["a"])
+    rounds = []  # (start, end)
+    end = clock.t + 1800
+    while clock.t < end:
+        due = f.streams["a"]["next_due"]
+        if due <= clock.t:
+            start = clock.t
+            f.tick(start)
+            rounds.append((start, clock.t))
+        else:
+            clock.t = due
+    pauses = [b[0] - a[1] for a, b in zip(rounds, rounds[1:])]
+    assert pauses and min(pauses) >= 15.0 and max(pauses) <= 25.0
+    assert len({round(p, 1) for p in pauses}) > 5

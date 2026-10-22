@@ -50,6 +50,9 @@ INTERVALS = {"minute": (30.0, 60.0), "head-all": (15.0, 25.0)}
 MIN_INTERVAL, MAX_INTERVAL = INTERVALS["minute"]
 # Seconds between the HEAD requests inside one head-all round.
 HEAD_GAP = (0.1, 0.8)
+# At most this many segments (the newest) get a HEAD in one round. A stream
+# hiccup once made Twitch list 94 segments (2026-10-22 09:14-09:18Z).
+MAX_HEADS_PER_ROUND = 20
 MAX_STREAMS = 2
 DEFAULT_BUDGET_MB = 300
 # Seconds before the next request in one fetch (playlist -> segment).
@@ -293,7 +296,7 @@ class HLSFetcher(object):
         return True
 
     def __head_all(self, login, media_text):
-        segments = all_segments(media_text)
+        segments = all_segments(media_text)[-MAX_HEADS_PER_ROUND:]
         if not segments:
             return False
         for url in segments:
@@ -318,7 +321,8 @@ class HLSFetcher(object):
         done = 0
         for login, state in due:
             # Fresh, independent draw for each fetch and each stream.
-            state["next_due"] = now + self.next_interval()
+            gap = self.next_interval()
+            state["next_due"] = now + gap
             if self.__over_budget():
                 continue
             try:
@@ -326,6 +330,10 @@ class HLSFetcher(object):
             except requests.exceptions.RequestException as e:
                 state["media_url"] = None
                 logger.debug(f"HLS segment fetch for {login} failed: {e}")
+            # The gap counts from the end of this round, so the pause between
+            # two rounds is never shorter than the drawn 15-25 s (30-60 s),
+            # however long a round takes.
+            state["next_due"] = max(now, self.clock()) + gap
         return done
 
     def seconds_to_next(self, now):
