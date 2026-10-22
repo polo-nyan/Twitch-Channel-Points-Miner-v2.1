@@ -38,6 +38,14 @@ from TwitchChannelPointsMiner.classes.DropSchedule import (
     is_drop_relevant,
     lane_priority_enabled,
 )
+from TwitchChannelPointsMiner.classes.FreeBadges import (
+    DIRECTORY_LIMIT,
+    DOCUMENTS as FREE_BADGE_DOCUMENTS,
+    MAX_DETAIL_CAMPAIGNS,
+    STATE_FILE as FREE_BADGE_STATE_FILE,
+    FreeBadgePlanner,
+    pick_slot,
+)
 from TwitchChannelPointsMiner.classes.HLSFetcher import HLSFetcher
 from TwitchChannelPointsMiner.classes.GQLHealer import GQLHealer, stale_operations
 from TwitchChannelPointsMiner.classes.Settings import (
@@ -78,6 +86,8 @@ class Twitch(object):
         "hls_fetcher",
         "lane_priority",
         "lane_watch",
+        "free_badges",
+        "free_badge_streamer",
         "twilight_build_id_pattern",
         "gql_healer",
         "gql_healer_next_refresh",
@@ -105,6 +115,11 @@ class Twitch(object):
         # Reward-choice channels ahead of game-drop streams (TCPM_DROP_LANE_PRIORITY).
         self.lane_priority = lane_priority_enabled(self.drop_lanes.mode)
         self.lane_watch = {}  # track -> channel id picked for it (sticky)
+        # Free watch-time badges on not-followed channels (TCPM_FREE_BADGES).
+        self.free_badges = FreeBadgePlanner(
+            os.path.join(Path().absolute(), "analytics", FREE_BADGE_STATE_FILE)
+        )
+        self.free_badge_streamer = None
         # Real HLS segment downloads for drop progress (TCPM_HLS_SEGMENT_FETCH).
         self.hls_fetcher = HLSFetcher(self.playlist_url_for, user_agent=self.user_agent)
         self.twilight_build_id_pattern = re.compile(
@@ -628,23 +643,34 @@ class Twitch(object):
                         streamers_watching.update(streamers_with_multiplier[:remaining_watch_amount()])
 
                 streamers_watching = list(streamers_watching)[:max_watch_amount]
+                watch_targets = [streamers[index] for index in streamers_watching]
+                free_streamer = self.__free_badge_watch_target()
+                if free_streamer is not None:
+                    watch_targets = pick_slot(
+                        watch_targets,
+                        free_streamer,
+                        lambda s: is_drop_relevant(s, self.drop_lanes.lane_channels),
+                        self.__keeps_watch_streak,
+                    )
 
                 if self.hls_fetcher.enabled:
                     # Only streams watched for drops: a drops campaign for the
-                    # stream's game, or a reward-choice campaign on the channel.
+                    # stream's game, a reward-choice campaign on the channel, or
+                    # the free-badge channel.
                     self.hls_fetcher.set_targets(
                         [
-                            streamers[index].username
-                            for index in streamers_watching
-                            if is_drop_relevant(
-                                streamers[index], self.drop_lanes.lane_channels
+                            streamer.username
+                            for streamer in watch_targets
+                            if streamer is free_streamer
+                            or is_drop_relevant(
+                                streamer, self.drop_lanes.lane_channels
                             )
                         ]
                     )
 
-                for index in streamers_watching:
-                    # next_iteration = time.time() + 60 / len(streamers_watching)
-                    next_iteration = time.time() + 20 / len(streamers_watching)
+                for streamer in watch_targets:
+                    # next_iteration = time.time() + 60 / len(watch_targets)
+                    next_iteration = time.time() + 20 / len(watch_targets)
 
                     try:
                         ####################################
@@ -653,7 +679,7 @@ class Twitch(object):
                         json_data = copy.deepcopy(
                             GQLOperations.PlaybackAccessToken)
                         json_data["variables"] = {
-                            "login": streamers[index].username,
+                            "login": streamer.username,
                             "isLive": True,
                             "isVod": False,
                             "vodID": "",
@@ -667,7 +693,7 @@ class Twitch(object):
                             responsePlaybackAccessToken = self.post_gql_request(
                                 json_data)
                             logger.debug(
-                                f"Sent PlaybackAccessToken request for {streamers[index]}")
+                                f"Sent PlaybackAccessToken request for {streamer}")
 
                             if 'data' not in responsePlaybackAccessToken:
                                 logger.error(
@@ -687,13 +713,13 @@ class Twitch(object):
 
                         except Exception as e:
                             logger.error(
-                                f"Error fetching PlaybackAccessToken for {streamers[index]}: {str(e)}")
+                                f"Error fetching PlaybackAccessToken for {streamer}: {str(e)}")
                             continue
 
                         # encoded_value = quote(json.dumps(value))
 
                         # Construct the URL for the broadcast qualities
-                        RequestBroadcastQualitiesURL = f"https://usher.ttvnw.net/api/channel/hls/{streamers[index].username}.m3u8?sig={signature}&token={value}"
+                        RequestBroadcastQualitiesURL = f"https://usher.ttvnw.net/api/channel/hls/{streamer.username}.m3u8?sig={signature}&token={value}"
 
                         # Get list of video qualities
                         responseBroadcastQualities = requests.get(
@@ -702,7 +728,7 @@ class Twitch(object):
                             timeout=20,
                         )  # timeout=60
                         logger.debug(
-                            f"Send RequestBroadcastQualitiesURL request for {streamers[index]} - Status code: {responseBroadcastQualities.status_code}"
+                            f"Send RequestBroadcastQualitiesURL request for {streamer} - Status code: {responseBroadcastQualities.status_code}"
                         )
                         if responseBroadcastQualities.status_code != 200:
                             continue
@@ -721,7 +747,7 @@ class Twitch(object):
                             timeout=20,
                         )  # timeout=60
                         logger.debug(
-                            f"Send BroadcastLowestQualityURL request for {streamers[index]} - Status code: {responseStreamURLList.status_code}"
+                            f"Send BroadcastLowestQualityURL request for {streamer} - Status code: {responseStreamURLList.status_code}"
                         )
                         if responseStreamURLList.status_code != 200:
                             continue
@@ -739,24 +765,26 @@ class Twitch(object):
                             timeout=20,
                         )  # timeout=60
                         logger.debug(
-                            f"Send StreamLowestQualityURL request for {streamers[index]} - Status code: {responseStreamLowestQualityURL.status_code}"
+                            f"Send StreamLowestQualityURL request for {streamer} - Status code: {responseStreamLowestQualityURL.status_code}"
                         )
                         if responseStreamLowestQualityURL.status_code != 200:
                             continue
                         # End of fix for 2024/5 API Change
                         ##################################
                         response = requests.post(
-                            streamers[index].stream.spade_url,
-                            data=streamers[index].stream.encode_payload(),
+                            streamer.stream.spade_url,
+                            data=streamer.stream.encode_payload(),
                             headers={"User-Agent": self.user_agent},
                             # timeout=60,
                             timeout=20,
                         )
                         logger.debug(
-                            f"Send minute watched request for {streamers[index]} - Status code: {response.status_code}"
+                            f"Send minute watched request for {streamer} - Status code: {response.status_code}"
                         )
                         if response.status_code == 204:
-                            streamers[index].stream.update_minute_watched()
+                            streamer.stream.update_minute_watched()
+                            if streamer is free_streamer:
+                                self.free_badges.note_watched(streamer.username)
 
                             """
                             Remember, you can only earn progress towards a time-based Drop on one participating channel at a time.  [ ! ! ! ]
@@ -764,7 +792,7 @@ class Twitch(object):
                             For time-based Drops, if you are unable to claim the Drop in time, you will be able to claim it from the inventory page until the Drops campaign ends.
                             """
 
-                            for campaign in streamers[index].stream.campaigns:
+                            for campaign in streamer.stream.campaigns:
                                 for drop in campaign.drops:
                                     # We could add .has_preconditions_met condition inside is_printable
                                     if (
@@ -772,7 +800,7 @@ class Twitch(object):
                                         and drop.is_printable is True
                                     ):
                                         drop_messages = [
-                                            f"{streamers[index]} is streaming {streamers[index].stream}",
+                                            f"{streamer} is streaming {streamer.stream}",
                                             f"Campaign: {campaign}",
                                             f"Drop: {drop}",
                                             f"{drop.progress_bar()}",
@@ -825,7 +853,7 @@ class Twitch(object):
                         next_iteration - time.time(), chunk_size=chunk_size
                     )
 
-                if streamers_watching == []:
+                if watch_targets == []:
                     # self.__chuncked_sleep(60, chunk_size=chunk_size)
                     self.__chuncked_sleep(20, chunk_size=chunk_size)
             except Exception:
@@ -1148,6 +1176,111 @@ class Twitch(object):
                             drop.is_claimed = self.claim_drop(drop)
                             time.sleep(random.uniform(5, 10))
 
+    @staticmethod
+    def __keeps_watch_streak(streamer):
+        return (
+            streamer.settings.watch_streak is True
+            and streamer.stream.watch_streak_missing is True
+            and streamer.stream.minute_watched < 7
+        )
+
+    def __free_badge_watch_target(self):
+        """The free-badge streamer, if it is live; refreshed every 10 min."""
+        streamer = self.free_badge_streamer
+        if streamer is None:
+            return None
+        if (streamer.stream.update_elapsed() / 60) > 10:
+            try:
+                self.update_stream(streamer)
+            except StreamerIsOfflineException:
+                self.free_badge_streamer = None
+                self.free_badges.channel_offline()
+                return None
+        return streamer
+
+    def __make_free_badge_streamer(self, login):
+        # Imported here: Streamer pulls in the chat module.
+        from TwitchChannelPointsMiner.classes.entities.Streamer import Streamer
+        from TwitchChannelPointsMiner.utils import set_default_settings
+
+        streamer = Streamer(
+            login, settings=set_default_settings(None, Settings.streamer_settings)
+        )
+        streamer.settings.claim_drops = True
+        streamer.channel_id = self.get_channel_id(login)
+        self.get_spade_url(streamer)
+        self.update_stream(streamer)  # raises StreamerIsOfflineException
+        # Online without set_online(): no chat join, no notifications.
+        streamer.is_online = True
+        streamer.online_at = time.time() - 60
+        return streamer
+
+    def __free_badge_directory(self, slug):
+        response = self.post_gql_request(
+            {
+                "operationName": "FreeBadgeDirectory",
+                "query": FREE_BADGE_DOCUMENTS["FreeBadgeDirectory"],
+                "variables": {
+                    "slug": slug,
+                    "limit": DIRECTORY_LIMIT,
+                    "options": {
+                        "sort": "VIEWER_COUNT",
+                        "systemFilters": ["DROPS_ENABLED"],
+                    },
+                },
+            }
+        )
+        game = ((response or {}).get("data") or {}).get("game") or {}
+        edges = (game.get("streams") or {}).get("edges") or []
+        return [
+            (edge["node"]["broadcaster"]["id"], edge["node"]["broadcaster"]["login"])
+            for edge in edges
+            if (edge.get("node") or {}).get("broadcaster")
+        ]
+
+    def update_free_badges(self, streamers, dashboard):
+        """Pick or keep the free-badge channel. See classes/FreeBadges.py."""
+        if not self.free_badges.enabled:
+            return
+        ids = [c["id"] for c in dashboard or [] if c.get("id")][:MAX_DETAIL_CAMPAIGNS]
+        user_id = f"{self.twitch_login.get_user_id()}"
+        campaigns = []
+        for chunk in create_chunks(ids, 20):
+            response = self.post_gql_request(
+                [
+                    {
+                        "operationName": "FreeBadgeCampaign",
+                        "query": FREE_BADGE_DOCUMENTS["FreeBadgeCampaign"],
+                        "variables": {"dropID": cid, "channelLogin": user_id},
+                    }
+                    for cid in chunk
+                ]
+            )
+            for r in response if isinstance(response, list) else []:
+                campaign = ((r.get("data") or {}).get("user") or {}).get("dropCampaign")
+                if campaign:
+                    campaigns.append(campaign)
+        configured = [
+            (s.channel_id, s.stream.game_id())
+            for s in streamers
+            if s.is_online is True and s.settings.claim_drops is True
+        ]
+        login = self.free_badges.update(
+            campaigns,
+            configured,
+            self.__free_badge_directory,
+            followed=[s.username for s in streamers],
+        )
+        current = self.free_badge_streamer
+        if login is None:
+            self.free_badge_streamer = None
+        elif current is None or current.username != login:
+            try:
+                self.free_badge_streamer = self.__make_free_badge_streamer(login)
+            except (StreamerIsOfflineException, StreamerDoesNotExistException):
+                self.free_badge_streamer = None
+                self.free_badges.channel_offline()
+
     def update_drop_lanes(self, streamers):
         """Select the next unearned reward in reward-choice campaigns on the
         online channels that have drops enabled. See classes/DropLanes.py."""
@@ -1182,9 +1315,9 @@ class Twitch(object):
 
                     # Get full details from current ACTIVE campaigns
                     # Use dashboard so we can explore new drops not currently active in our Inventory
-                    campaigns_details = self.__get_campaigns_details(
-                        self.__get_drops_dashboard(status="ACTIVE")
-                    )
+                    dashboard = self.__get_drops_dashboard(status="ACTIVE")
+                    campaigns_details = self.__get_campaigns_details(dashboard)
+                    self.update_free_badges(streamers, dashboard)
                     campaigns = []
 
                     # Going to clear array and structure. Remove all the timeBasedDrops expired or not started yet
