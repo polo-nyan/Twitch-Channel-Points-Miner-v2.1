@@ -1264,34 +1264,18 @@ class Twitch(object):
         game = data.get("byName") or data.get("bySlug") or {}
         return game.get("slug")
 
-    def __channel_campaign_ids(self, channel_id):
-        json_data = copy.deepcopy(GQLOperations.DropsHighlightService_AvailableDrops)
-        json_data["variables"] = {"channelID": channel_id}
-        response = self.post_gql_request(json_data)
-        channel = ((response or {}).get("data") or {}).get("channel") or {}
-        return [c["id"] for c in channel.get("viewerDropCampaigns") or [] if c.get("id")]
-
-    def __free_badge_details(self, ids):
-        """FreeBadgeCampaign details for `ids` (one batched request)."""
-        if not ids:
-            return []
-        user_id = f"{self.twitch_login.get_user_id()}"
+    def __channel_drop_campaigns(self, channel_id):
+        """Drop campaigns on a channel, with the fields the free-badge rule
+        needs (FreeBadgeChannelDrops)."""
         response = self.post_gql_request(
-            [
-                {
-                    "operationName": "FreeBadgeCampaign",
-                    "query": FREE_BADGE_DOCUMENTS["FreeBadgeCampaign"],
-                    "variables": {"dropID": cid, "channelLogin": user_id},
-                }
-                for cid in ids
-            ]
+            {
+                "operationName": "FreeBadgeChannelDrops",
+                "query": FREE_BADGE_DOCUMENTS["FreeBadgeChannelDrops"],
+                "variables": {"channelID": channel_id},
+            }
         )
-        campaigns = []
-        for r in response if isinstance(response, list) else []:
-            campaign = ((r.get("data") or {}).get("user") or {}).get("dropCampaign")
-            if campaign:
-                campaigns.append(campaign)
-        return campaigns
+        channel = ((response or {}).get("data") or {}).get("channel") or {}
+        return [c for c in channel.get("viewerDropCampaigns") or [] if c and c.get("id")]
 
     def update_free_badges(self, streamers, dashboard=None):
         """Pick or keep the free-badge channel (FreeBadges.py). Campaigns are
@@ -1302,8 +1286,7 @@ class Twitch(object):
         ops = SimpleNamespace(
             directory=self.__free_badge_directory,
             game=self.__free_badge_game,
-            channel_campaigns=self.__channel_campaign_ids,
-            details=self.__free_badge_details,
+            channel_campaigns=self.__channel_drop_campaigns,
         )
         login, summary, used = free_badge_cycle(
             self.free_badges,

@@ -138,7 +138,7 @@ class Probe(object):
 
     def channel(self, channel_id):
         self.calls.append(("chan", channel_id))
-        return list(self.campaigns)
+        return [{"id": cid} for cid in self.campaigns]
 
 
 def test_discovery_stays_within_the_request_caps(tmp_path):
@@ -147,7 +147,7 @@ def test_discovery_stays_within_the_request_caps(tmp_path):
     budget = bg.RequestBudget()
     sleeps = []
     games = [f"Game {i}" for i in range(10)]
-    ids, probed, tried = bg.discover(games, lst, probe.resolve, probe.directory, probe.channel,
+    ids, probed, tried, seen = bg.discover(games, lst, probe.resolve, probe.directory, probe.channel,
                                      budget, random.Random(2), sleeps.append)
     assert len(probe.calls) == budget.used <= bg.MAX_REQUESTS - bg.DETAIL_RESERVE
     assert len(tried) <= bg.GAMES_PER_CYCLE
@@ -156,7 +156,7 @@ def test_discovery_stays_within_the_request_caps(tmp_path):
         if kind == "chan":
             per_game[arg.rsplit("-", 1)[0]] = per_game.get(arg.rsplit("-", 1)[0], 0) + 1
     assert all(n <= bg.CHANNELS_PER_GAME for n in per_game.values())
-    assert probed == sum(per_game.values()) and ids == ["c1"]
+    assert probed == sum(per_game.values()) and [c["id"] for c in ids] == ["c1"]
     assert sleeps and all(bg.JITTER[0] <= s <= bg.JITTER[1] for s in sleeps)
     assert len(set(sleeps)) > 1
 
@@ -175,9 +175,9 @@ def test_slugs_are_cached_so_the_next_cycle_skips_the_lookup(tmp_path):
 def test_known_ineligible_campaigns_are_skipped(tmp_path):
     lst, _ = game_list(tmp_path, FakeSession([]), NOW)
     probe = Probe(campaigns=("bad", "good"))
-    ids, _, _ = bg.discover(["Witchspire"], lst, probe.resolve, probe.directory, probe.channel,
+    ids, _, _, _ = bg.discover(["Witchspire"], lst, probe.resolve, probe.directory, probe.channel,
                             bg.RequestBudget(), random.Random(1), lambda s: None, skip_ids={"bad"})
-    assert ids == ["good"]
+    assert [c["id"] for c in ids] == ["good"]
 
 
 def test_budget_reserve():

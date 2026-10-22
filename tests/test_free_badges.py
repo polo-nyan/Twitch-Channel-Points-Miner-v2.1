@@ -3,12 +3,13 @@
 channels, with the operator's 2.5-5 day cooldown)."""
 
 import copy
+import os
 import logging
 import json
 import random
 from types import SimpleNamespace
 
-from conftest import load_module
+from conftest import ROOT, load_module
 
 fb = load_module(
     "TwitchChannelPointsMiner.classes.FreeBadges",
@@ -27,7 +28,7 @@ CAMPAIGN = {
     "accountLinkURL": "",
     "self": {"isAccountConnected": False},
     "game": {"id": "1408630947", "name": "Witchspire", "displayName": "Witchspire", "slug": "witchspire"},
-    "allow": {"isEnabled": True, "channels": None},
+    "allow": {"isEnabled": False, "channels": None},
     "timeBasedDrops": [
         {
             "id": "drop-1", "name": "Witchspire Logo", "requiredMinutesWatched": 60,
@@ -228,11 +229,16 @@ def test_free_badge_replaces_a_points_only_stream():
     assert slot([game, points], free) == [game, free]
 
 
-def test_missing_campaign_data_changes_nothing(tmp_path):
+def test_missing_campaign_data_keeps_the_badge_for_a_while(tmp_path):
     p = planner(tmp_path)
     p.update([CAMPAIGN], [], directory([("1", "random1")]))
-    assert p.update([], [], directory([]), now=NOW + 1800) == "random1"
+    # No answer: no watching this cycle, the badge and the timers stay.
+    assert p.update([], [], directory([]), now=NOW + 1800) is None
     assert p.active is not None and p.state["cooldown_until"] == 0.0
+    # Bounded: after MISSING_CHECKS cycles without an answer it is abandoned.
+    for i in range(fb.MISSING_CHECKS):
+        p.update([], [], directory([]), now=NOW + 3600 * (i + 2))
+    assert p.active is None and p.state["cooldown_until"] > NOW
 
 
 
@@ -398,11 +404,7 @@ class CountingOps(object):
 
     def channel_campaigns(self, channel_id):
         self.requests += 1
-        return list(self.campaigns)
-
-    def details(self, ids):
-        self.requests += len(ids)
-        return [self.campaigns[i] for i in ids if i in self.campaigns]
+        return list(self.campaigns.values())
 
 
 class StaticList(object):
@@ -455,7 +457,7 @@ def test_no_list_means_nothing_eligible_without_requests(tmp_path, caplog):
     assert any("nothing eligible (no badge-game list)" in r.getMessage() for r in caplog.records)
 
 
-def test_active_badge_costs_one_detail_request(tmp_path):
+def test_active_badge_costs_one_channel_request(tmp_path):
     p = planner(tmp_path)
     ops = CountingOps([CAMPAIGN])
     fb.free_badge_cycle(p, StaticList(["Witchspire"]), ops, [], [], NOW, set(), sleep=lambda s: None)
@@ -473,3 +475,114 @@ def test_ineligible_campaigns_are_remembered_and_skipped(tmp_path):
     skip = set()
     login, _, _ = fb.free_badge_cycle(p, StaticList(["Witchspire"]), ops, [], [], NOW, skip, sleep=lambda s: None)
     assert login is None and skip == {"not-badge"}
+
+
+# --------------------- option D: per-channel eligibility ------------------- #
+with open(os.path.join(ROOT, "tests", "fixtures", "channel_drops_apple_tv.json")) as f:
+    APPLE = json.load(f)["data"]["channel"]["viewerDropCampaigns"][0]
+
+LIVE_NOW = datetime(2026, 10, 22, 14, 35, tzinfo=timezone.utc).timestamp()
+
+
+def as_badge(campaign, link=None, connected=False):
+    """The live Apple TV answer turned into a badge campaign (derived)."""
+    c = copy.deepcopy(campaign)
+    c["accountLinkURL"] = link
+    c["self"] = {"isAccountConnected": connected}
+    for drop in c["timeBasedDrops"]:
+        drop["requiredMinutesWatched"] = 60
+        for edge in drop["benefitEdges"]:
+            edge["benefit"]["distributionType"] = "BADGE"
+    return c
+
+
+def test_live_apple_tv_answer_is_not_eligible_code_reward_and_link():
+    ok, reason = fb.eligibility(APPLE, LIVE_NOW)
+    assert ok is False and reason == "needs a linked game account"
+    linked = copy.deepcopy(APPLE)
+    linked["self"]["isAccountConnected"] = True
+    assert fb.eligibility(linked, LIVE_NOW) == (False, "not a watch-time drop (0 minutes)")
+    timed = copy.deepcopy(linked)
+    timed["timeBasedDrops"][0]["requiredMinutesWatched"] = 30
+    assert fb.eligibility(timed, LIVE_NOW) == (False, "reward type CODE")
+
+
+def test_badge_only_without_link_is_eligible():
+    assert fb.eligibility(as_badge(APPLE, link=None), LIVE_NOW) == (True, "eligible")
+    assert fb.eligibility(as_badge(APPLE, link=""), LIVE_NOW) == (True, "eligible")
+
+
+def test_link_set_and_not_connected_is_not_eligible():
+    c = as_badge(APPLE, link="https://link.test", connected=False)
+    assert fb.eligibility(c, LIVE_NOW) == (False, "needs a linked game account")
+
+
+def test_link_set_and_connected_is_eligible():
+    c = as_badge(APPLE, link="https://link.test", connected=True)
+    assert fb.eligibility(c, LIVE_NOW) == (True, "eligible")
+
+
+def test_allow_list_disabled_means_no_restriction_enabled_needs_the_list():
+    c = as_badge(APPLE)
+    assert c["allow"] == {"channels": None, "isEnabled": False}  # as Twitch sends it
+    assert fb.eligibility(c, LIVE_NOW)[0] is True
+    c["allow"]["isEnabled"] = True  # restricted, but no list: unknown
+    assert fb.eligibility(c, LIVE_NOW) == (False, "allow.channels missing")
+
+
+def drop_path(c, path):
+    node = c
+    for key in path[:-1]:
+        node = node[key]
+    return node, path[-1]
+
+
+def test_any_missing_or_null_field_means_no_pick():
+    paths = [
+        ("status",), ("startAt",), ("endAt",), ("accountLinkURL",), ("self",),
+        ("self", "isAccountConnected"), ("allow",), ("allow", "isEnabled"),
+        ("game", "slug"), ("timeBasedDrops",),
+        ("timeBasedDrops", 0, "requiredMinutesWatched"),
+        ("timeBasedDrops", 0, "benefitEdges"),
+        ("timeBasedDrops", 0, "benefitEdges", 0, "benefit", "distributionType"),
+        ("timeBasedDrops", 0, "self"), ("timeBasedDrops", 0, "self", "isClaimed"),
+    ]
+    for path in paths:
+        for how in ("missing", "null"):
+            c = as_badge(APPLE)
+            node, key = drop_path(c, path)
+            if how == "missing":
+                node.pop(key)
+            else:
+                node[key] = None
+            ok, reason = fb.eligibility(c, LIVE_NOW)
+            if path == ("accountLinkURL",) and how == "null":
+                assert ok is True  # null link URL = no link needed
+                continue
+            assert ok is False, (path, how, reason)
+
+
+def test_skip_reason_is_logged_once(tmp_path, caplog):
+    p = planner(tmp_path, clock=lambda: LIVE_NOW)
+    d = directory([("56648155", "twitchplayspokemon")])
+    with caplog.at_level(logging.INFO, logger=fb.__name__):
+        for _ in range(3):
+            assert p.update([APPLE], [], d, now=LIVE_NOW) is None
+    skips = [r.getMessage() for r in caplog.records if "skip 1 Month of Apple TV" in r.getMessage()]
+    assert skips == ["Free badges: skip 1 Month of Apple TV (Special Events): needs a linked game account"]
+
+
+def test_cycle_with_live_answer_uses_at_most_15_requests_and_picks_nothing(tmp_path):
+    p = planner(tmp_path, clock=lambda: LIVE_NOW)
+    ops = CountingOps([APPLE])
+    games = StaticList(["Witchspire", "Alien Isolation", "Enshrouded", "PAYDAY 3", "Roblox"])
+    login, summary, used = fb.free_badge_cycle(p, games, ops, [], [], LIVE_NOW, set(), sleep=lambda s: None)
+    assert login is None and used == ops.requests <= 15 and "0 eligible" in summary
+
+
+def test_cycle_picks_a_probed_channel_for_an_eligible_badge(tmp_path):
+    p = planner(tmp_path, clock=lambda: LIVE_NOW)
+    ops = CountingOps([as_badge(APPLE)])
+    login, summary, used = fb.free_badge_cycle(
+        p, StaticList(["Special Events"]), ops, [], [], LIVE_NOW, set(), sleep=lambda s: None)
+    assert login is not None and used <= 15 and p.active["channel_id"]

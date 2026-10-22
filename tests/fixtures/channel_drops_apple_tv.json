@@ -1,0 +1,52 @@
+{
+ "_comment": "LIVE FreeBadgeChannelDrops answer for twitchplayspokemon (56648155), 2026-10-22 ~14:35Z, miner's TV-client login. A channel answer holds no account data; nothing needed redacting (checked for user id, login, token).",
+ "data": {
+  "channel": {
+   "id": "56648155",
+   "viewerDropCampaigns": [
+    {
+     "accountLinkURL": "https://tv.apple.com/redeem/",
+     "allow": {
+      "channels": null,
+      "isEnabled": false
+     },
+     "endAt": "2026-11-03T19:59:59.999Z",
+     "game": {
+      "displayName": "Special Events",
+      "id": "509663",
+      "slug": "special-events"
+     },
+     "id": "df28c49a-1a1f-45d5-b3e5-603cb4a7b208",
+     "name": "1 Month of Apple TV",
+     "self": {
+      "isAccountConnected": false
+     },
+     "startAt": "2026-10-20T19:00:00Z",
+     "status": "ACTIVE",
+     "timeBasedDrops": [
+      {
+       "benefitEdges": [
+        {
+         "benefit": {
+          "distributionType": "CODE",
+          "id": "1e20a97c-c84e-11f1-b89b-0a58a9feac02",
+          "name": "1 Month of Apple TV"
+         }
+        }
+       ],
+       "endAt": "2026-11-03T19:59:59.999Z",
+       "id": "4c02faf6-c8bf-11f1-8ea4-0a58a9feac02",
+       "name": "1 Month of Apple TV",
+       "requiredMinutesWatched": 0,
+       "self": {
+        "currentMinutesWatched": 0,
+        "isClaimed": false
+       },
+       "startAt": "2026-10-20T19:00:00Z"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

@@ -64,15 +64,17 @@ MISSING_CHECKS = 6  # cycles without a live channel -> abandon
 STATE_FILE = "free_badges.json"
 
 DOCUMENTS = {
-    "FreeBadgeCampaign": (
-        "query FreeBadgeCampaign($dropID: ID!, $channelLogin: ID!) {"
-        " user(id: $channelLogin) { id dropCampaign(id: $dropID) {"
+    # The per-channel campaign list, with the fields the eligibility rule
+    # needs. For the miner's TV-client login this answer is filled in, while
+    # user.dropCampaign(id) comes back null (checked 2026-10-22).
+    "FreeBadgeChannelDrops": (
+        "query FreeBadgeChannelDrops($channelID: ID!) { channel(id: $channelID) {"
+        " id viewerDropCampaigns {"
         " id name status startAt endAt accountLinkURL self { isAccountConnected }"
-        " game { id name displayName slug } allow { isEnabled channels { id name } }"
+        " game { id name displayName slug } allow { isEnabled channels { id } }"
         " timeBasedDrops { id name requiredMinutesWatched startAt endAt"
-        " preconditionDrops { id }"
         " benefitEdges { benefit { id name distributionType } }"
-        " self { currentMinutesWatched isClaimed dropInstanceID } } } } }"
+        " self { currentMinutesWatched isClaimed } } } } }"
     ),
     "FreeBadgeGame": (
         "query FreeBadgeGame($name: String!, $slug: String!) {"
@@ -153,29 +155,71 @@ def _drop_open(drop, now):
     return not (drop.get("self") or {}).get("isClaimed")
 
 
-def campaign_eligible(campaign, now):
-    """Badge-only, no linked account needed, active and unfinished."""
-    if not campaign or campaign.get("status") != "ACTIVE":
-        return False
+def eligibility(campaign, now):
+    """(eligible, reason) for a campaign from the per-channel answer.
+
+    Rule (q-6725): every drop's reward is a BADGE; no accountLinkURL, or
+    self.isAccountConnected is true; allow.isEnabled is known (false means no
+    channel restriction, true means only the listed channels); every drop
+    needs more than 0 minutes; the campaign is active and not finished. A
+    field that is missing or null means "unknown", and unknown means no pick.
+    """
+    if not isinstance(campaign, dict):
+        return False, "no data"
+    status = campaign.get("status")
+    if status is None:
+        return False, "status missing"
+    if status != "ACTIVE":
+        return False, f"status {status}"
     start, end = _time(campaign.get("startAt")), _time(campaign.get("endAt"))
-    if start is None or end is None or not (start <= now < end):
-        return False
-    if campaign.get("accountLinkURL") and not (campaign.get("self") or {}).get(
-        "isAccountConnected"
-    ):
-        return False
-    if not ((campaign.get("game") or {}).get("slug")):
-        return False
-    drops = campaign.get("timeBasedDrops") or []
-    if not drops:
-        return False
+    if start is None or end is None:
+        return False, "start/end missing"
+    if not (start <= now < end):
+        return False, "outside its dates"
+    if "accountLinkURL" not in campaign:
+        return False, "accountLinkURL missing"
+    me = campaign.get("self")
+    if not isinstance(me, dict) or not isinstance(me.get("isAccountConnected"), bool):
+        return False, "self.isAccountConnected missing"
+    if campaign.get("accountLinkURL") and me["isAccountConnected"] is not True:
+        return False, "needs a linked game account"
+    allow = campaign.get("allow")
+    if not isinstance(allow, dict) or not isinstance(allow.get("isEnabled"), bool):
+        return False, "allow.isEnabled missing"
+    if allow["isEnabled"] and not isinstance(allow.get("channels"), list):
+        return False, "allow.channels missing"
+    if not (campaign.get("game") or {}).get("slug"):
+        return False, "game slug missing"
+    drops = campaign.get("timeBasedDrops")
+    if not isinstance(drops, list) or not drops:
+        return False, "no time-based drops"
+    any_open = False
     for drop in drops:
-        if not (drop.get("requiredMinutesWatched") or 0) > 0:
-            return False
-        benefits = [e.get("benefit") or {} for e in drop.get("benefitEdges") or []]
-        if not benefits or any(b.get("distributionType") != "BADGE" for b in benefits):
-            return False
-    return any(_drop_open(d, now) for d in drops)
+        minutes = drop.get("requiredMinutesWatched")
+        if not isinstance(minutes, int):
+            return False, "requiredMinutesWatched missing"
+        if minutes <= 0:
+            return False, "not a watch-time drop (0 minutes)"
+        edges = drop.get("benefitEdges")
+        if not isinstance(edges, list) or not edges:
+            return False, "rewards missing"
+        for edge in edges:
+            kind = (edge.get("benefit") or {}).get("distributionType")
+            if kind is None:
+                return False, "reward type missing"
+            if kind != "BADGE":
+                return False, f"reward type {kind}"
+        state = drop.get("self")
+        if not isinstance(state, dict) or not isinstance(state.get("isClaimed"), bool):
+            return False, "drop progress missing"
+        any_open = any_open or _drop_open(drop, now)
+    if not any_open:
+        return False, "all drops claimed or closed"
+    return True, "eligible"
+
+
+def campaign_eligible(campaign, now):
+    return eligibility(campaign, now)[0]
 
 
 def allowed_channel_ids(campaign):
@@ -307,19 +351,19 @@ class FreeBadgePlanner(object):
     def __pick_channel(self, campaign, directory, exclude=()):
         """Random live drops-enabled channel for the campaign's game,
         respecting the allow list. `directory(slug)` returns
-        [(channel_id, login)]."""
+        [(channel_id, login)]. Returns (channel_id, login) or (None, None)."""
         allowed = allowed_channel_ids(campaign)
         live = [
             (cid, login)
             for cid, login in directory(campaign["game"]["slug"])
             if login and login not in exclude and (not allowed or cid in allowed)
         ]
-        return self.rng.choice(live)[1] if live else None
+        return self.rng.choice(live) if live else (None, None)
 
     def update(self, campaigns, configured, directory, followed=(), now=None):
         """Run once per drops cycle.
 
-        campaigns:  FreeBadgeCampaign `dropCampaign` dicts (active campaigns)
+        campaigns:  campaign dicts from the per-channel answer (FreeBadgeChannelDrops)
         configured: [(channel_id, game_id)] of online configured streamers
                     with drops on
         directory:  callable(slug) -> [(channel_id, login)] live channels
@@ -333,9 +377,19 @@ class FreeBadgePlanner(object):
         by_id = {c["id"]: c for c in campaigns if c and c.get("id")}
 
         active = self.active
-        if active and not by_id:
-            # No campaign data at all (request failed): change nothing.
-            return active.get("channel")
+        if active and active["campaign_id"] not in by_id:
+            # No answer for the active campaign (channel offline, request
+            # failed): keep it, but not forever.
+            if now >= float(active.get("end_at") or 0) and active.get("end_at"):
+                self.__finish("ended", now)
+                return None
+            active["missing"] = active.get("missing", 0) + 1
+            active["channel"] = active["channel_id"] = None
+            if active["missing"] >= MISSING_CHECKS:
+                self.__finish("abandoned (no answer for the campaign)", now)
+                return None
+            self.save()
+            return None
         if active:
             campaign = by_id.get(active["campaign_id"])
             if campaign is None or not campaign_eligible(campaign, now):
@@ -354,9 +408,10 @@ class FreeBadgePlanner(object):
             if active["stale"] >= STALE_CHECKS:
                 self.__finish(f"abandoned (no progress in {STALE_CHECKS} checks)", now)
                 return None
+            active["missing"] = 0
             if not active.get("channel"):
-                channel = self.__pick_channel(campaign, directory, followed)
-                active["channel"] = channel
+                channel_id, channel = self.__pick_channel(campaign, directory, followed)
+                active["channel"], active["channel_id"] = channel, channel_id
                 if channel:
                     active["missing"] = 0
                     logger.info(
@@ -381,13 +436,18 @@ class FreeBadgePlanner(object):
                 f"Free badges: weekday timer until {_fmt(self.state['cooldown_until'])}{weekend}")
             return None
 
-        candidates = [
-            c for c in by_id.values()
-            if campaign_eligible(c, now) and not covered_by_configured(c, configured)
-        ]
+        candidates = []
+        for c in by_id.values():
+            ok, reason = eligibility(c, now)
+            if not ok:
+                game = (c.get("game") or {}).get("displayName") or "?"
+                self.__log_once(("skip", c.get("id"), reason),
+                                f"Free badges: skip {c.get('name')} ({game}): {reason}")
+            elif not covered_by_configured(c, configured):
+                candidates.append(c)
         self.rng.shuffle(candidates)
         for campaign in candidates:
-            channel = self.__pick_channel(campaign, directory, followed)
+            channel_id, channel = self.__pick_channel(campaign, directory, followed)
             if not channel:
                 continue
             badge = ", ".join(badge_names(campaign)) or campaign.get("name")
@@ -396,6 +456,9 @@ class FreeBadgePlanner(object):
                 "badge": badge,
                 "game": campaign["game"].get("displayName") or campaign["game"].get("name"),
                 "channel": channel,
+                "channel_id": channel_id,
+                "slug": campaign["game"]["slug"],
+                "end_at": _time(campaign.get("endAt")),
                 "picked_at": now,
                 "minutes": watched_minutes(campaign),
                 "stale": 0,
@@ -456,42 +519,59 @@ def free_badge_cycle(planner, game_list, ops, configured, followed, now, skip_id
     """One drops cycle of the free-badge feature, with a hard request budget.
 
     ops: object with directory(slug) -> [(channel_id, login)],
-    game(name) -> slug, channel_campaigns(channel_id) -> [campaign ids] and
-    details(ids) -> [campaign dicts]. Each call is one request (details: one
-    per id). Returns (login or None, summary text, requests used).
+    game(name) -> slug and channel_campaigns(channel_id) -> [campaign dicts]
+    (the FreeBadgeChannelDrops answer). Each call is one request.
+    Returns (login or None, summary text, requests used).
     """
-    from TwitchChannelPointsMiner.classes.BadgeGames import (
-        DETAIL_RESERVE,
-        RequestBudget,
-        discover,
-    )
+    from TwitchChannelPointsMiner.classes.BadgeGames import RequestBudget, discover
 
     budget = RequestBudget()
     memo = {}
+    seen_by_slug = {}  # game slug -> probed live channels that carry a campaign
 
     def probe_directory(slug):  # discover() takes the budget itself
         if slug not in memo:
             memo[slug] = ops.directory(slug)
         return memo[slug]
 
-    def directory(slug):  # for the planner: one request on a miss
+    def directory(slug):  # for the planner: probed channels, else one request
+        if slug not in memo and slug in seen_by_slug:
+            return seen_by_slug[slug]
         if slug not in memo:
             if not budget.take(1):
                 return []
             memo[slug] = ops.directory(slug)
         return memo[slug]
 
-    def details(ids):
-        ids = [cid for cid in ids if budget.take(1)]
-        return ops.details(ids) if ids else []
-
     if planner.active is None and planner.free_timer(now) is None:
         # Both timers are cooling down: no request at all.
         planner.update([], configured, lambda slug: [], followed=followed, now=now)
         return None, "both timers cooling down", 0
 
-    if planner.active is not None:
-        campaigns = details([planner.active["campaign_id"]])
+    active = planner.active
+    if active is not None:
+        # Progress of the active badge, from the watched channel's answer, or
+        # from up to 2 other live channels of the game.
+        campaigns = []
+
+        def ask(channel_id):
+            if not budget.take(1):
+                return []
+            return ops.channel_campaigns(channel_id) or []
+
+        def has_active(answer):
+            return any(c.get("id") == active["campaign_id"] for c in answer)
+
+        if active.get("channel_id"):
+            campaigns = ask(active["channel_id"])
+        if not has_active(campaigns) and active.get("slug"):
+            others = {f.lower() for f in followed} | {(active.get("channel") or "").lower()}
+            for channel_id, login in directory(active["slug"])[:2]:
+                if login.lower() in others:
+                    continue
+                campaigns = ask(channel_id)
+                if has_active(campaigns):
+                    break
         summary = "tracking the active badge"
     else:
         games = game_list.games()
@@ -499,17 +579,22 @@ def free_badge_cycle(planner, game_list, ops, configured, followed, now, skip_id
             planner.log_once(("no-list", int(now // 86400)),
                              "Free badges: nothing eligible (no badge-game list)")
             return None, "no badge-game list", budget.used
-        ids, probed, tried = discover(
+        campaigns, probed, tried, seen = discover(
             games, game_list, ops.game, probe_directory, ops.channel_campaigns,
             budget, planner.rng, sleep, skip_ids=skip_ids)
-        campaigns = details(ids[:DETAIL_RESERVE])
+        for campaign in campaigns:
+            slug = (campaign.get("game") or {}).get("slug")
+            if slug:
+                channels = seen_by_slug.setdefault(slug, [])
+                channels += [c for c in seen.get(campaign["id"], []) if c not in channels]
         for campaign in campaigns:
             if not campaign_eligible(campaign, now):
                 skip_ids.add(campaign["id"])
         summary = (
             f"{len(games)} games listed (fetched {game_list.fetched_text()}), "
             f"tried {', '.join(tried) or 'none'}, {probed} channels probed, "
-            f"{len(ids)} campaigns found, {len(campaigns)} read"
+            f"{len(campaigns)} campaigns found, "
+            f"{sum(campaign_eligible(c, now) for c in campaigns)} eligible"
         )
     login = planner.update(campaigns, configured, directory, followed=followed, now=now)
     return login, summary, budget.used
