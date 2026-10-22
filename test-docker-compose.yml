@@ -22,6 +22,11 @@ services:
       # off | dry-run (log only) | on. Optional preference list of reward names.
       - TCPM_DROP_LANE_SWITCH=${TCPM_DROP_LANE_SWITCH:-off}
       - TCPM_DROP_LANE_PREFERENCE=${TCPM_DROP_LANE_PREFERENCE:-}
+      # Real HLS segment downloads for drop progress (classes/HLSFetcher.py):
+      # off | minute (one 160p segment every 30-60 s, random) | continuous (not yet).
+      - TCPM_HLS_SEGMENT_FETCH=${TCPM_HLS_SEGMENT_FETCH:-off}
+      - TCPM_HLS_DAILY_BUDGET_MB=${TCPM_HLS_DAILY_BUDGET_MB:-300}
+      - TCPM_HLS_SEGMENT_CHANNELS=${TCPM_HLS_SEGMENT_CHANNELS:-}
     volumes:
      # - './data/analytics:/usr/src/app/analytics'
      # - './data/cookies:/usr/src/app/cookies'

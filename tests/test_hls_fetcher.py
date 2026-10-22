@@ -1,0 +1,166 @@
+# -*- coding: utf-8 -*-
+"""Tests for classes/HLSFetcher.py. Offline: the HTTP session, the clock and
+sleep are fakes."""
+
+import logging
+import random
+import statistics
+
+from conftest import load_module
+
+hls = load_module(
+    "TwitchChannelPointsMiner.classes.HLSFetcher",
+    "TwitchChannelPointsMiner/classes/HLSFetcher.py",
+)
+HLSFetcher = hls.HLSFetcher
+
+MASTER = """#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=3422999,RESOLUTION=1280x720,VIDEO="720p60"
+https://example.test/720p.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=230000,RESOLUTION=284x160,VIDEO="160p30"
+https://example.test/160p.m3u8
+"""
+MEDIA = """#EXTM3U
+#EXT-X-TARGETDURATION:2
+#EXTINF:2.000,live
+https://example.test/seg-1.ts
+#EXTINF:2.000,live
+https://example.test/seg-2.ts
+"""
+SEGMENT = b"x" * 72380
+
+
+class FakeResponse(object):
+    def __init__(self, url):
+        self.status_code = 200
+        if url.endswith("master"):
+            self.content = MASTER.encode()
+        elif url.endswith(".m3u8"):
+            self.content = MEDIA.encode()
+        else:
+            self.content = SEGMENT
+        self.text = self.content.decode("latin-1")
+
+    def iter_content(self, chunk_size=1):
+        for i in range(0, len(self.content), chunk_size):
+            yield self.content[i:i + chunk_size]
+
+    def close(self):
+        pass
+
+
+class FakeSession(object):
+    def __init__(self):
+        self.urls = []
+
+    def get(self, url, headers=None, timeout=None, stream=False):
+        self.urls.append(url)
+        return FakeResponse(url)
+
+    def segments(self):
+        return [u for u in self.urls if u.endswith(".ts")]
+
+
+def fetcher(mode="minute", budget=300 * 1048576, channels=(), seed=1):
+    session = FakeSession()
+    f = HLSFetcher(
+        lambda login: f"https://usher.test/{login}/master",
+        mode=mode, budget=budget, channels=list(channels), session=session,
+        rng=random.Random(seed), clock=lambda: 0.0, sleep=lambda s: None,
+        threaded=False,
+    )
+    return f, session
+
+
+def run(f, seconds, step=1.0, start=1_761_100_000.0):
+    t = start
+    while t < start + seconds:
+        f.tick(t)
+        t += step
+
+
+def test_playlist_parsing():
+    assert hls.lowest_variant(MASTER) == "https://example.test/160p.m3u8"
+    assert hls.newest_segment(MEDIA) == "https://example.test/seg-2.ts"
+
+
+def test_interval_is_random_within_30_to_60_seconds():
+    f, _ = fetcher()
+    draws = [f.next_interval() for _ in range(500)]
+    assert all(30.0 <= d <= 60.0 for d in draws)
+    assert len(set(draws)) > 400
+    assert statistics.pstdev(draws) > 5
+
+
+def test_fetch_times_per_stream_are_independent_and_not_constant():
+    f, session = fetcher()
+    f.set_targets(["a", "b"])
+    times = {"a": [], "b": []}
+    t, start = 1_761_100_000.0, 1_761_100_000.0
+    while t < start + 3600:
+        before = dict((k, v["next_due"]) for k, v in f.streams.items())
+        f.tick(t)
+        for login, state in f.streams.items():
+            if state["next_due"] != before[login]:
+                times[login].append(t)
+        t += 0.5
+    for login in times:
+        gaps = [b - a for a, b in zip(times[login], times[login][1:])]
+        assert gaps and all(29.5 <= g <= 61.0 for g in gaps)
+        assert len({round(g) for g in gaps}) > 5
+    assert times["a"] != times["b"]
+    assert len(session.segments()) == len(times["a"]) + len(times["b"])
+
+
+def test_off_makes_no_fetches():
+    f, session = fetcher(mode="off")
+    assert f.set_targets(["a"]) == []
+    run(f, 600)
+    assert session.urls == []
+
+
+def test_continuous_is_not_implemented(caplog):
+    with caplog.at_level(logging.WARNING, logger=hls.__name__):
+        f, session = fetcher(mode="continuous")
+    assert f.enabled is False
+    assert any("not implemented" in r.getMessage() for r in caplog.records)
+    f.set_targets(["a"])
+    run(f, 600)
+    assert session.urls == []
+
+
+def test_budget_stops_fetching(caplog):
+    f, session = fetcher(budget=3 * len(SEGMENT))
+    f.set_targets(["a"])
+    with caplog.at_level(logging.INFO, logger=hls.__name__):
+        run(f, 3600)
+    assert len(session.segments()) == 3
+    assert sum("daily budget" in r.getMessage() for r in caplog.records) == 1
+
+
+def test_budget_resets_next_utc_day():
+    f, session = fetcher(budget=2 * len(SEGMENT))
+    f.set_targets(["a"])
+    day1 = 1_761_100_000.0  # 2025-10-22 02:26 UTC (any day works)
+    run(f, 1800, start=day1)
+    assert len(session.segments()) == 2
+    run(f, 600, start=day1 + 86400)
+    assert len(session.segments()) > 2
+
+
+def test_at_most_two_streams_and_channel_allowlist():
+    f, _ = fetcher()
+    assert f.set_targets(["a", "b", "c"]) == ["a", "b"]
+    f, _ = fetcher(channels=["TwitchPlaysPokemon"])
+    assert f.set_targets(["badgebase", "twitchplayspokemon"]) == ["twitchplayspokemon"]
+
+
+def test_dropped_target_stops_being_fetched():
+    f, session = fetcher()
+    f.set_targets(["a"])
+    run(f, 300)
+    count = len(session.segments())
+    assert count > 0
+    f.set_targets([])
+    run(f, 300, start=1_761_200_000.0)
+    assert len(session.segments()) == count
