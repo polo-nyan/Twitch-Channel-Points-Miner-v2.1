@@ -34,7 +34,9 @@ from TwitchChannelPointsMiner.classes.DropClaims import DropClaimTracker
 from TwitchChannelPointsMiner.classes.DropLanes import DropLaneSwitcher
 from TwitchChannelPointsMiner.classes.DropSchedule import (
     campaigns_refresh_due,
+    drops_order,
     is_drop_relevant,
+    lane_priority_enabled,
 )
 from TwitchChannelPointsMiner.classes.HLSFetcher import HLSFetcher
 from TwitchChannelPointsMiner.classes.GQLHealer import GQLHealer, stale_operations
@@ -74,6 +76,7 @@ class Twitch(object):
         "client_version",
         "drop_lanes",
         "hls_fetcher",
+        "lane_priority",
         "twilight_build_id_pattern",
         "gql_healer",
         "gql_healer_next_refresh",
@@ -98,6 +101,8 @@ class Twitch(object):
         self.client_version = CLIENT_VERSION
         # Reward choice in multi-day channel campaigns (TCPM_DROP_LANE_SWITCH).
         self.drop_lanes = DropLaneSwitcher()
+        # Reward-choice channels ahead of game-drop streams (TCPM_DROP_LANE_PRIORITY).
+        self.lane_priority = lane_priority_enabled(self.drop_lanes.mode)
         # Real HLS segment downloads for drop progress (TCPM_HLS_SEGMENT_FETCH).
         self.hls_fetcher = HLSFetcher(self.playlist_url_for, user_agent=self.user_agent)
         self.twilight_build_id_pattern = re.compile(
@@ -595,13 +600,15 @@ class Twitch(object):
                                     break
 
                     elif prior == Priority.DROPS:
-                        for index in streamers_index:
-                            if is_drop_relevant(
-                                streamers[index], self.drop_lanes.lane_channels
-                            ):
-                                streamers_watching.add(index)
-                                if remaining_watch_amount() <= 0:
-                                    break
+                        for index in drops_order(
+                            streamers,
+                            streamers_index,
+                            self.drop_lanes.lane_channels,
+                            self.lane_priority,
+                        ):
+                            streamers_watching.add(index)
+                            if remaining_watch_amount() <= 0:
+                                break
 
                     elif prior == Priority.SUBSCRIBED:
                         streamers_with_multiplier = [

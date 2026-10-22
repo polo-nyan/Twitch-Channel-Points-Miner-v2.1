@@ -4,16 +4,23 @@
 Since about 2026-10, Twitch seems to count drop progress only while the
 stream's HLS media segments are downloaded, as a player does (upstream #846).
 Minute-watched events alone did not move any drop in a 22-minute check on
-2026-10-22. The minute-watched loop only sends a HEAD request for the newest
-segment.
+2026-10-22, and `minute` mode (one segment every 30-60 s) did not either in a
+40-minute test. The minute-watched loop only sends a HEAD request for the
+newest segment.
 
 TCPM_HLS_SEGMENT_FETCH:
     off         (default) nothing changes
     minute      for each drop-relevant watched stream (at most 2), download
                 the newest 160p segment at a random interval of 30-60 s,
                 drawn fresh for each fetch and for each stream
+    head-all    for each drop-relevant watched stream (at most 2), read the
+                160p media playlist and send a HEAD request for every listed
+                segment, one round every 15-25 s (random, per stream), with
+                0.1-0.8 s random gaps between the HEADs. This is what
+                DevilXD/TwitchDropsMiner does since 2026-10-09 (f693b0c).
     continuous  not implemented; logs a warning and does nothing
 TCPM_HLS_DAILY_BUDGET_MB: bytes per UTC day for all fetches (default 300).
+    Requests are counted and logged too.
 TCPM_HLS_SEGMENT_CHANNELS: optional comma-separated logins; when set, only
     these channels are fetched.
 
@@ -36,10 +43,13 @@ logger = logging.getLogger(__name__)
 MODE_ENV = "TCPM_HLS_SEGMENT_FETCH"
 BUDGET_ENV = "TCPM_HLS_DAILY_BUDGET_MB"
 CHANNELS_ENV = "TCPM_HLS_SEGMENT_CHANNELS"
-MODES = ("off", "minute", "continuous")
+MODES = ("off", "minute", "head-all", "continuous")
 
-MIN_INTERVAL = 30.0
-MAX_INTERVAL = 60.0
+# Seconds between rounds, per mode (a fresh uniform draw for each round).
+INTERVALS = {"minute": (30.0, 60.0), "head-all": (15.0, 25.0)}
+MIN_INTERVAL, MAX_INTERVAL = INTERVALS["minute"]
+# Seconds between the HEAD requests inside one head-all round.
+HEAD_GAP = (0.1, 0.8)
 MAX_STREAMS = 2
 DEFAULT_BUDGET_MB = 300
 # Seconds before the next request in one fetch (playlist -> segment).
@@ -92,12 +102,16 @@ def lowest_variant(master_text):
     return variants[-1][1] if variants else None
 
 
-def newest_segment(media_text):
-    segments = [
+def all_segments(media_text):
+    return [
         line.strip()
         for line in media_text.splitlines()
-        if line.strip() and not line.startswith("#")
+        if line.strip().startswith("http")
     ]
+
+
+def newest_segment(media_text):
+    segments = all_segments(media_text)
     return segments[-1] if segments else None
 
 
@@ -109,7 +123,8 @@ class HLSFetcher(object):
     __slots__ = [
         "mode", "budget", "channels", "playlist_url_for", "user_agent",
         "session", "rng", "clock", "sleep", "lock", "streams", "day",
-        "bytes_today", "segments_today", "budget_logged", "next_report",
+        "bytes_today", "segments_today", "requests_today", "budget_logged",
+        "next_report",
         "thread", "running", "threaded",
     ]
 
@@ -137,6 +152,7 @@ class HLSFetcher(object):
         self.day = None
         self.bytes_today = 0
         self.segments_today = 0
+        self.requests_today = 0
         self.budget_logged = False
         self.next_report = 0.0
         self.thread = None
@@ -145,10 +161,14 @@ class HLSFetcher(object):
 
     @property
     def enabled(self):
-        return self.mode == "minute"
+        return self.mode in INTERVALS
+
+    @property
+    def interval_range(self):
+        return INTERVALS.get(self.mode, INTERVALS["minute"])
 
     def next_interval(self):
-        return self.rng.uniform(MIN_INTERVAL, MAX_INTERVAL)
+        return self.rng.uniform(*self.interval_range)
 
     def set_targets(self, logins):
         """Streams to fetch now: drop-relevant streams the miner watches."""
@@ -171,7 +191,7 @@ class HLSFetcher(object):
                 if login not in self.streams:
                     # First fetch after a random delay too: no fixed start.
                     self.streams[login] = {
-                        "next_due": now + self.rng.uniform(0, MAX_INTERVAL - MIN_INTERVAL),
+                        "next_due": now + self.rng.uniform(0, self.interval_range[0]),
                         "media_url": None,
                         "media_refresh_at": 0.0,
                     }
@@ -187,15 +207,17 @@ class HLSFetcher(object):
         elif day != self.day:
             logger.info(
                 f"HLS segment fetch on {self.day}: "
-                f"{self.bytes_today / 1048576:.1f} MB, {self.segments_today} segments"
+                f"{self.bytes_today / 1048576:.1f} MB, {self.segments_today} segments, "
+                f"{self.requests_today} requests"
             )
             self.day, self.bytes_today, self.segments_today = day, 0, 0
+            self.requests_today = 0
             self.budget_logged = False
         if now >= self.next_report:
             if self.next_report:
                 logger.info(
                     f"HLS segment fetch today: {self.bytes_today / 1048576:.1f} MB, "
-                    f"{self.segments_today} segments (budget "
+                    f"{self.segments_today} segments, {self.requests_today} requests (budget "
                     f"{self.budget / 1048576:.0f} MB)"
                 )
             self.next_report = now + REPORT_EVERY
@@ -225,6 +247,15 @@ class HLSFetcher(object):
             if stream:
                 response.close()
         self.bytes_today += size
+        self.requests_today += 1
+        return response
+
+    def __head(self, url):
+        headers = {"User-Agent": self.user_agent} if self.user_agent else {}
+        response = self.session.head(url, headers=headers, timeout=TIMEOUT)
+        # No body; count the response headers as the cost.
+        self.bytes_today += sum(len(k) + len(v) + 4 for k, v in (response.headers or {}).items())
+        self.requests_today += 1
         return response
 
     def fetch(self, login, state, now):
@@ -246,6 +277,8 @@ class HLSFetcher(object):
         if media.status_code != 200:
             state["media_url"] = None  # token expired: new master next time
             return False
+        if self.mode == "head-all":
+            return self.__head_all(login, media.text)
         segment_url = newest_segment(media.text)
         if not segment_url:
             return False
@@ -259,8 +292,24 @@ class HLSFetcher(object):
         logger.debug(f"HLS segment fetched for {login}")
         return True
 
+    def __head_all(self, login, media_text):
+        segments = all_segments(media_text)
+        if not segments:
+            return False
+        for url in segments:
+            if self.__over_budget():
+                return False
+            self.sleep(self.rng.uniform(*HEAD_GAP))
+            if self.__head(url).status_code != 200:
+                logger.debug(f"HLS HEAD round for {login} stopped: segment not 200")
+                return False
+            self.segments_today += 1
+        logger.debug(f"HLS HEAD round for {login}: {len(segments)} segments")
+        return True
+
     def tick(self, now=None):
-        """Run the fetches that are due. Returns the number of segments read."""
+        """Run the fetches that are due. Returns the number of successful
+        fetches (a segment read, or a complete HEAD round)."""
         now = self.clock() if now is None else now
         self.__roll_day(now)
         with self.lock:
@@ -283,8 +332,8 @@ class HLSFetcher(object):
         with self.lock:
             dues = [s["next_due"] for s in self.streams.values()]
         if not dues:
-            return MAX_INTERVAL
-        return min(max(min(dues) - now, 1.0), MAX_INTERVAL)
+            return self.interval_range[1]
+        return min(max(min(dues) - now, 1.0), self.interval_range[1])
 
     def start(self):
         if self.thread is not None or not self.enabled or not self.threaded:
@@ -293,8 +342,9 @@ class HLSFetcher(object):
         self.thread = threading.Thread(target=self.__loop, name="HLSFetcher", daemon=True)
         self.thread.start()
         logger.info(
-            f"HLS segment fetch on ({MODE_ENV}=minute, every {MIN_INTERVAL:.0f}-"
-            f"{MAX_INTERVAL:.0f} s, budget {self.budget / 1048576:.0f} MB/day)"
+            f"HLS segment fetch on ({MODE_ENV}={self.mode}, every "
+            f"{self.interval_range[0]:.0f}-{self.interval_range[1]:.0f} s, "
+            f"budget {self.budget / 1048576:.0f} MB/day)"
         )
 
     def stop(self):
