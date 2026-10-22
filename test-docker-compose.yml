@@ -18,6 +18,10 @@ services:
       # IRC chat uses TLS on 6697. 1 = fall back to plaintext 6667 (WARNING
       # in the log) when the first TLS connection fails. Off by default.
       - TCPM_IRC_PLAINTEXT_FALLBACK=${TCPM_IRC_PLAINTEXT_FALLBACK:-0}
+      # Reward choice in multi-day channel drop campaigns (classes/DropLanes.py):
+      # off | dry-run (log only) | on. Optional preference list of reward names.
+      - TCPM_DROP_LANE_SWITCH=${TCPM_DROP_LANE_SWITCH:-off}
+      - TCPM_DROP_LANE_PREFERENCE=${TCPM_DROP_LANE_PREFERENCE:-}
     volumes:
      # - './data/analytics:/usr/src/app/analytics'
      # - './data/cookies:/usr/src/app/cookies'
