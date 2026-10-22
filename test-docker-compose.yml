@@ -15,6 +15,9 @@ services:
       - ANALYTICS_TOKEN=${ANALYTICS_TOKEN:-}
       # How often to re-check Twitch's persisted-query hashes. 0 disables.
       - GQL_REFRESH_HOURS=${GQL_REFRESH_HOURS:-12}
+      # IRC chat uses TLS on 6697. 1 = fall back to plaintext 6667 (WARNING
+      # in the log) when the first TLS connection fails. Off by default.
+      - TCPM_IRC_PLAINTEXT_FALLBACK=${TCPM_IRC_PLAINTEXT_FALLBACK:-0}
     volumes:
      # - './data/analytics:/usr/src/app/analytics'
      # - './data/cookies:/usr/src/app/cookies'

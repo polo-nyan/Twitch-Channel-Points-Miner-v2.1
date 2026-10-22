@@ -30,6 +30,7 @@ from TwitchChannelPointsMiner.classes.Exceptions import (
     StreamerDoesNotExistException,
     StreamerIsOfflineException,
 )
+from TwitchChannelPointsMiner.classes.DropClaims import DropClaimTracker
 from TwitchChannelPointsMiner.classes.DropLanes import DropLaneSwitcher
 from TwitchChannelPointsMiner.classes.GQLHealer import GQLHealer, stale_operations
 from TwitchChannelPointsMiner.classes.Settings import (
@@ -70,6 +71,7 @@ class Twitch(object):
         "twilight_build_id_pattern",
         "gql_healer",
         "gql_healer_next_refresh",
+        "drop_claims",
     ]
 
     def __init__(self, username, user_agent, password=None):
@@ -98,6 +100,7 @@ class Twitch(object):
         self.gql_healer = GQLHealer(user_agent=self.user_agent)
         self.gql_healer.load_cache()
         self.gql_healer_next_refresh = 0.0
+        self.drop_claims = DropClaimTracker()
 
     def refresh_gql_hashes(self, force=False):
         """Probe every persisted-query hash and repair the stale ones.
@@ -760,8 +763,9 @@ class Twitch(object):
                             f"Error while trying to send minute watched: {e}")
                         self.__check_connection_handler(chunk_size)
                     except requests.exceptions.Timeout as e:
-                        logger.error(
-                            f"Error while trying to send minute watched: {e}")
+                        logger.debug(
+                            f"Timed out while trying to send minute watched: {e}"
+                        )
 
                     self.__chuncked_sleep(
                         next_iteration - time.time(), chunk_size=chunk_size
@@ -1070,32 +1074,10 @@ class Twitch(object):
         return campaigns
 
     def claim_drop(self, drop):
-        logger.info(
-            f"Claim {drop}", extra={"emoji": ":package:", "event": Events.DROP_CLAIM}
-        )
-
-        json_data = copy.deepcopy(GQLOperations.DropsPage_ClaimDropRewards)
-        json_data["variables"] = {
-            "input": {"dropInstanceID": drop.drop_instance_id}}
-        response = self.post_gql_request(json_data)
-        try:
-            # response["data"]["claimDropRewards"] can be null and respose["data"]["errors"] != []
-            # or response["data"]["claimDropRewards"]["status"] === DROP_INSTANCE_ALREADY_CLAIMED
-            if ("claimDropRewards" in response["data"]) and (
-                response["data"]["claimDropRewards"] is None
-            ):
-                return False
-            elif ("errors" in response["data"]) and (response["data"]["errors"] != []):
-                return False
-            elif ("claimDropRewards" in response["data"]) and (
-                response["data"]["claimDropRewards"]["status"]
-                in ["ELIGIBLE_FOR_ALL", "DROP_INSTANCE_ALREADY_CLAIMED"]
-            ):
-                return True
-            else:
-                return False
-        except (ValueError, KeyError):
-            return False
+        # DropClaimTracker checks the claim status and stops after a few
+        # attempts that did not stick (drops that need a linked game account
+        # come back unclaimed forever, upstream #844/#845).
+        return self.drop_claims.claim(drop, self.post_gql_request)
 
     def claim_all_drops_from_inventory(self):
         inventory = self.__get_inventory()
@@ -1105,7 +1087,10 @@ class Twitch(object):
                     for drop_dict in campaign["timeBasedDrops"]:
                         drop = Drop(drop_dict)
                         drop.update(drop_dict["self"])
-                        if drop.is_claimable is True:
+                        if (
+                            drop.is_claimable is True
+                            and self.drop_claims.is_skipped(drop) is False
+                        ):
                             drop.is_claimed = self.claim_drop(drop)
                             time.sleep(random.uniform(5, 10))
 
