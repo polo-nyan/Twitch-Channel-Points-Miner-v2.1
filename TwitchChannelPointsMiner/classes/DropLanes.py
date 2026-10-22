@@ -237,7 +237,8 @@ class DropLaneSwitcher(object):
         if key in self.logged:
             return
         self.logged.add(key)
-        logger.log(level, message, extra={"emoji": ":package:"})
+        # stacklevel=2: the log line names the caller (run), not this helper.
+        logger.log(level, message, extra={"emoji": ":package:"}, stacklevel=2)
 
     def run(self, channel_id, channel_name, post_gql_request, now=None):
         """Check one channel. Returns the list of (track, lane) selections made
