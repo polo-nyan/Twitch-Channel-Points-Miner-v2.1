@@ -220,7 +220,7 @@ def _data(response, key):
 
 
 class DropLaneSwitcher(object):
-    __slots__ = ["mode", "preference", "attempts", "finished", "logged"]
+    __slots__ = ["mode", "preference", "attempts", "finished", "logged", "lane_channels"]
 
     def __init__(self, mode=None, preference=None):
         self.mode = mode if mode is not None else mode_from_env()
@@ -232,6 +232,10 @@ class DropLaneSwitcher(object):
         self.attempts = {}  # (track, lane) -> select attempts
         self.finished = set()  # channel ids with nothing left to earn
         self.logged = set()  # one-time log keys
+        # Channel ids with an unfinished reward-choice campaign. A channel
+        # campaign is allowed on its channel by definition, so these channels
+        # are drop-relevant (used by HLSFetcher).
+        self.lane_channels = set()
 
     def __log_once(self, key, level, message):
         if key in self.logged:
@@ -261,7 +265,9 @@ class DropLaneSwitcher(object):
             return []  # no answer; try again next cycle
         tracks = tracks_from_campaigns(campaigns)
         if not tracks:
+            self.lane_channels.discard(channel_id)
             return []
+        self.lane_channels.add(channel_id)
 
         selections = _data(
             post_gql_request(
@@ -350,6 +356,7 @@ class DropLaneSwitcher(object):
 
         if finished_tracks == len(tracks):
             self.finished.add(channel_id)
+            self.lane_channels.discard(channel_id)
             self.__log_once(
                 ("finished", channel_id),
                 logging.INFO,

@@ -32,6 +32,7 @@ from TwitchChannelPointsMiner.classes.Exceptions import (
 )
 from TwitchChannelPointsMiner.classes.DropClaims import DropClaimTracker
 from TwitchChannelPointsMiner.classes.DropLanes import DropLaneSwitcher
+from TwitchChannelPointsMiner.classes.HLSFetcher import HLSFetcher
 from TwitchChannelPointsMiner.classes.GQLHealer import GQLHealer, stale_operations
 from TwitchChannelPointsMiner.classes.Settings import (
     Events,
@@ -68,6 +69,7 @@ class Twitch(object):
         "client_session",
         "client_version",
         "drop_lanes",
+        "hls_fetcher",
         "twilight_build_id_pattern",
         "gql_healer",
         "gql_healer_next_refresh",
@@ -92,6 +94,8 @@ class Twitch(object):
         self.client_version = CLIENT_VERSION
         # Reward choice in multi-day channel campaigns (TCPM_DROP_LANE_SWITCH).
         self.drop_lanes = DropLaneSwitcher()
+        # Real HLS segment downloads for drop progress (TCPM_HLS_SEGMENT_FETCH).
+        self.hls_fetcher = HLSFetcher(self.playlist_url_for, user_agent=self.user_agent)
         self.twilight_build_id_pattern = re.compile(
             r'window\.__twilightBuildID\s*=\s*"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"'
         )
@@ -484,6 +488,27 @@ class Twitch(object):
             logger.error(f"Error with update_client_version: {e}")
             return self.client_version
 
+    def playlist_url_for(self, login):
+        """Master HLS playlist URL for a live channel, with a fresh playback
+        access token (same request as the minute-watched loop). None on error."""
+        json_data = copy.deepcopy(GQLOperations.PlaybackAccessToken)
+        json_data["variables"] = {
+            "login": login,
+            "isLive": True,
+            "isVod": False,
+            "vodID": "",
+            "playerType": "site",
+            "platform": "web",
+        }
+        response = self.post_gql_request(json_data)
+        token = ((response or {}).get("data") or {}).get("streamPlaybackAccessToken") or {}
+        if not token.get("signature") or not token.get("value"):
+            return None
+        return (
+            f"https://usher.ttvnw.net/api/channel/hls/{login}.m3u8"
+            f"?sig={token['signature']}&token={token['value']}"
+        )
+
     def send_minute_watched_events(self, streamers, priority, chunk_size=3):
         while self.running:
             try:
@@ -587,6 +612,19 @@ class Twitch(object):
                         streamers_watching.update(streamers_with_multiplier[:remaining_watch_amount()])
 
                 streamers_watching = list(streamers_watching)[:max_watch_amount]
+
+                if self.hls_fetcher.enabled:
+                    # Only streams watched for drops: a drops campaign for the
+                    # stream's game, or a reward-choice campaign on the channel.
+                    self.hls_fetcher.set_targets(
+                        [
+                            streamers[index].username
+                            for index in streamers_watching
+                            if streamers[index].drops_condition() is True
+                            or streamers[index].channel_id
+                            in self.drop_lanes.lane_channels
+                        ]
+                    )
 
                 for index in streamers_watching:
                     # next_iteration = time.time() + 60 / len(streamers_watching)
