@@ -604,6 +604,8 @@ Allowed values for `chat` are:
 - `ONLINE` Partecipate to IRC chat if the streamer is online (leave if offline)
 - `OFFLINE` Partecipate to IRC chat if the streamer is offline (leave if online)
 
+The chat connection uses TLS (`irc.chat.twitch.tv:6697`), so the OAuth token is not sent in clear. If your network blocks TLS on that port, set `TCPM_IRC_PLAINTEXT_FALLBACK=1`: when the first TLS connection of a chat fails, the miner logs a WARNING and uses plaintext port 6667. The fallback is off by default.
+
 ### BetSettings
 | Key                	| Type            	| Default 	| Description                                                                                                    	                                                                          |
 |--------------------	|-----------------	|---------	|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
