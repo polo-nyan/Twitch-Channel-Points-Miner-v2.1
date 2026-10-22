@@ -138,17 +138,32 @@ def group_state(group, now):
     return AVAILABLE
 
 
+def current_stage(groups):
+    """The group that gets progress now. A lane can hold several groups that
+    are stages of one reward line (live data: Ivysaur, then Venusaur). Like
+    the web client: the first IN_PROGRESS group, else the first group that is
+    not started, else the first group."""
+    for group in groups:
+        if (group.get("self") or {}).get("status") == IN_PROGRESS:
+            return group
+    for group in groups:
+        if group.get("self") is None:
+            return group
+    return groups[0]
+
+
 def lane_state(groups, now):
-    states = [group_state(g, now) for g in groups]
-    for state in (AVAILABLE, DONE_TODAY):
-        if state in states:
-            return state
-    return FINISHED
+    """State of the lane's current stage. A later stage that is not started
+    does not make the lane available while the current stage is done for
+    today."""
+    return group_state(current_stage(groups), now)
 
 
 def lane_names(groups):
+    """Names for the lane: the current stage first, then the other stages."""
     names = []
-    for group in groups:
+    first = current_stage(groups)
+    for group in [first] + [g for g in groups if g is not first]:
         if group.get("name"):
             names.append(group["name"])
         names.extend(r["name"] for r in group.get("rewards") or [] if r.get("name"))
@@ -269,6 +284,23 @@ class DropLaneSwitcher(object):
                 finished_tracks += 1
                 continue
             if action != "switch":
+                if self.mode == "dry-run":
+                    current = selected.get(track)
+                    label = (
+                        lane_names(lanes[current])[:1] if current in lanes else []
+                    )
+                    self.__log_once(
+                        ("dry-run", track, current, action),
+                        logging.INFO,
+                        f"Reward choice on {channel_name}: "
+                        + (
+                            f"selected {', '.join(label) or current} can still make "
+                            "progress; keeping it"
+                            if action == "keep"
+                            else "every reward is done for today; nothing to select"
+                        )
+                        + f" ({MODE_ENV}=dry-run)",
+                    )
                 continue
             name = ", ".join(lane_names(lanes[lane])[:1]) or lane
             key = (track, lane)

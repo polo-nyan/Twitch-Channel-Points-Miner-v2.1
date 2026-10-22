@@ -187,3 +187,87 @@ def test_mode_from_env(monkeypatch):
     assert lanes_module.mode_from_env() == "dry-run"
     monkeypatch.setenv(lanes_module.MODE_ENV, "yes please")
     assert lanes_module.mode_from_env() == "off"
+
+
+# --------------------------------------------------------------------------- #
+# Live capture (twitchplayspokemon, 2026-10-22 ~06:35Z). Lanes are evolution
+# lines with several stages; the selected lane is Ivysaur -> Venusaur.
+# --------------------------------------------------------------------------- #
+with open(os.path.join(ROOT, "tests", "fixtures", "drop_lanes_live_20261022.json")) as f:
+    LIVE = json.load(f)
+
+LIVE_NOW = datetime(2026, 10, 22, 6, 35, tzinfo=timezone.utc)
+TRACK = "pokemon#aebee668-75ca-4626-99f5-168d369d217b"
+IVYSAUR = "53c2558e-9661-11f1-8d10-0a58a9feac02"  # selected; window expired
+WARTORTLE = "6fb2b2bf-9661-11f1-b7ec-0a58a9feac02"  # 20/20 in today's window
+GENGAR = "5130dfac-b7a5-11f1-93ac-0a58a9feac02"  # Haunter claimed, Gengar 2/20
+CHARIZARD = "60456d93-9661-11f1-9755-0a58a9feac02"  # Charmeleon claimed, 0 min
+PIKACHU = "7e978af0-9661-11f1-b03f-0a58a9feac02"  # claimed, single stage
+
+
+def live_lanes():
+    tracks = tracks_from_campaigns(
+        LIVE["DropChannelCampaignsProgress"]["data"]["channelDropCampaignsProgress"]
+    )
+    return tracks
+
+
+def live_selection(lane):
+    data = copy.deepcopy(LIVE["ProgressionTrackSelections"])
+    data["data"]["trackSelections"][0]["lane"] = lane
+    return data
+
+
+def test_live_only_the_evolution_track_has_lanes():
+    # The balls# track groups have no lane and are not a choice.
+    assert list(live_lanes()) == [TRACK]
+    assert live_selection(IVYSAUR)["data"]["trackSelections"][0]["lane"] == IVYSAUR
+    assert LIVE["ProgressionTrackSelections"]["data"]["trackSelections"][0]["lane"] == IVYSAUR
+
+
+def test_live_lane_states():
+    lanes = live_lanes()[TRACK]
+    states = {lane: lane_state(groups, LIVE_NOW) for lane, groups in lanes.items()}
+    assert states == {
+        GENGAR: "available",
+        CHARIZARD: "available",
+        IVYSAUR: "available",  # last window expired, so today's minutes are 0
+        PIKACHU: "finished",
+        WARTORTLE: "done_today",  # not "available" because Blastoise is unstarted
+    }
+    assert lanes_module.lane_names(lanes[IVYSAUR])[0] == "Ivysaur"
+    assert lanes_module.lane_names(lanes[WARTORTLE])[0] == "Wartortle"
+
+
+def test_live_selected_lane_with_progress_left_is_kept(caplog):
+    gql = FakeGQL(LIVE["DropChannelCampaignsProgress"], LIVE["ProgressionTrackSelections"])
+    with caplog.at_level(logging.INFO, logger=lanes_module.__name__):
+        changes = DropLaneSwitcher(mode="dry-run", preference=[]).run(
+            "56648155", "twitchplayspokemon", gql, now=LIVE_NOW
+        )
+    assert changes == []
+    assert gql.mutations() == []
+    assert any("selected Ivysaur can still make progress" in r.getMessage() for r in caplog.records)
+
+
+def test_live_done_today_lane_switches_to_first_available():
+    gql = FakeGQL(LIVE["DropChannelCampaignsProgress"], live_selection(WARTORTLE))
+    changes = DropLaneSwitcher(mode="on", preference=[]).run(
+        "56648155", "twitchplayspokemon", gql, now=LIVE_NOW
+    )
+    assert changes == [(TRACK, GENGAR)]
+    assert gql.mutations() == [{"track": TRACK, "lane": GENGAR}]
+
+
+def test_live_finished_lane_switches_with_preference():
+    gql = FakeGQL(LIVE["DropChannelCampaignsProgress"], live_selection(PIKACHU))
+    DropLaneSwitcher(mode="on", preference=["Charizard"]).run(
+        "56648155", "twitchplayspokemon", gql, now=LIVE_NOW
+    )
+    assert gql.mutations() == [{"track": TRACK, "lane": CHARIZARD}]
+
+
+def test_live_done_today_lane_is_available_after_its_window():
+    lanes = live_lanes()[TRACK]
+    after = datetime(2026, 10, 22, 19, 15, tzinfo=timezone.utc)
+    assert lane_state(lanes[WARTORTLE], after) == "available"
