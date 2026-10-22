@@ -9,9 +9,10 @@ login, so free-badge campaigns are found another way:
    fetched at most once a day, with an honest User-Agent, and cached in
    analytics/badge_games.json. A failed fetch or parse keeps the last cache.
 2. For a few of those games per cycle, a few live channels from the game
-   directory are asked for their drop campaigns (the per-channel query the
-   miner already uses), with a hard request budget and jitter. The campaign
-   details then go through the normal free-badge filter (FreeBadges.py).
+   directory are asked for their drop campaigns, with a hard request budget
+   and jitter. That per-channel answer carries the reward types, the account
+   link fields and the minutes, so it is all the free-badge filter
+   (FreeBadges.py) needs; the detail query is null for this login.
 """
 
 import json
@@ -37,7 +38,7 @@ SLUG_RETRY = 7 * 86400.0  # retry an unresolvable game name after a week
 GAMES_PER_CYCLE = 3
 CHANNELS_PER_GAME = 5
 MAX_REQUESTS = 15  # extra GQL operations per drops cycle
-DETAIL_RESERVE = 3  # of MAX_REQUESTS, kept for campaign details
+DETAIL_RESERVE = 0  # no separate detail query any more (option D)
 JITTER = (0.5, 2.0)  # seconds between discovery requests
 
 _NAME_PATTERNS = [
@@ -199,14 +200,16 @@ class BadgeGameList(object):
 
 def discover(games, game_list, resolve, directory, channel_campaigns, budget,
              rng, sleep, skip_ids=()):
-    """Find drop campaign ids on live channels of a few badge games.
+    """Find drop campaigns on live channels of a few badge games.
 
     resolve(name) -> slug; directory(slug) -> [(channel_id, login)];
-    channel_campaigns(channel_id) -> [campaign ids]. Every call costs one
+    channel_campaigns(channel_id) -> [campaign dicts]. Every call costs one
     request from `budget`, and calls are spread with random jitter.
-    Returns (campaign_ids, probed_channels, games_tried).
+    Returns (campaigns, probed_channels, games_tried, seen_on): campaigns are
+    unique by id, without the ids in `skip_ids`; seen_on maps a campaign id
+    to the probed (channel_id, login) pairs that carry it.
     """
-    ids, probed, tried = [], 0, []
+    found, probed, tried, seen = {}, 0, [], {}
     for name in rng.sample(games, min(GAMES_PER_CYCLE, len(games))):
         slug = game_list.slug(name, resolve, budget)
         if not slug:
@@ -216,12 +219,15 @@ def discover(games, game_list, resolve, directory, channel_campaigns, budget,
         sleep(rng.uniform(*JITTER))
         channels = directory(slug)
         tried.append(name)
-        for channel_id, _login in rng.sample(channels, min(CHANNELS_PER_GAME, len(channels))):
+        for channel_id, login in rng.sample(channels, min(CHANNELS_PER_GAME, len(channels))):
             if not budget.take(1, reserve=DETAIL_RESERVE):
-                return ids, probed, tried
+                return list(found.values()), probed, tried, seen
             sleep(rng.uniform(*JITTER))
             probed += 1
-            for cid in channel_campaigns(channel_id) or []:
-                if cid not in ids and cid not in skip_ids:
-                    ids.append(cid)
-    return ids, probed, tried
+            for campaign in channel_campaigns(channel_id) or []:
+                cid = (campaign or {}).get("id")
+                if not cid or cid in skip_ids:
+                    continue
+                found.setdefault(cid, campaign)
+                seen.setdefault(cid, []).append((channel_id, login))
+    return list(found.values()), probed, tried, seen
