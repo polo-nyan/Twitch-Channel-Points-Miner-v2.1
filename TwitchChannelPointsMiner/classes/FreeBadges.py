@@ -7,6 +7,9 @@ for N minutes ("earned by watching a streamer in the Witchspire category for
 own drops data lists them. The miner only watches configured streamers, so it
 misses the ones no configured streamer plays.
 
+Campaigns are found per channel for the games on the streamdatabase badge
+list (BadgeGames.py), because the dashboard list is empty for this login.
+
 TCPM_FREE_BADGES=on (default off) lets the miner watch one random live,
 drops-enabled channel for such a campaign, in one of its 2 watch slots, after
 the reward-choice channel and the configured game-drop streams.
@@ -56,7 +59,6 @@ COOLDOWN_DAYS = (2.5, 5.0)  # weekday timer
 WEEKEND_COOLDOWN_HOURS = (10.0, 25.0)  # weekend timer
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 DIRECTORY_LIMIT = 20  # channels per directory query
-MAX_DETAIL_CAMPAIGNS = 100  # campaign details read per cycle, at most
 STALE_CHECKS = 3  # cycles watched without progress -> abandon
 MISSING_CHECKS = 6  # cycles without a live channel -> abandon
 STATE_FILE = "free_badges.json"
@@ -71,6 +73,10 @@ DOCUMENTS = {
         " preconditionDrops { id }"
         " benefitEdges { benefit { id name distributionType } }"
         " self { currentMinutesWatched isClaimed dropInstanceID } } } } }"
+    ),
+    "FreeBadgeGame": (
+        "query FreeBadgeGame($name: String!, $slug: String!) {"
+        " byName: game(name: $name) { id slug } bySlug: game(slug: $slug) { id slug } }"
     ),
     "FreeBadgeDirectory": (
         "query FreeBadgeDirectory($slug: String!, $limit: Int, $options: GameStreamOptions) {"
@@ -421,9 +427,12 @@ class FreeBadgePlanner(object):
             self.save()
 
     def __log_once(self, key, message):
+        self.log_once(key, message, stacklevel=3)
+
+    def log_once(self, key, message, stacklevel=2):
         if key not in self.logged:
             self.logged.add(key)
-            logger.info(message, extra={"emoji": ":package:"}, stacklevel=2)
+            logger.info(message, extra={"emoji": ":package:"}, stacklevel=stacklevel)
 
 
 def pick_slot(targets, free, is_relevant, keeps_streak):
@@ -440,3 +449,67 @@ def pick_slot(targets, free, is_relevant, keeps_streak):
         if not is_relevant(targets[i]) and not keeps_streak(targets[i]):
             return targets[:i] + targets[i + 1:] + [free]
     return targets
+
+
+def free_badge_cycle(planner, game_list, ops, configured, followed, now, skip_ids,
+                     sleep=time.sleep):
+    """One drops cycle of the free-badge feature, with a hard request budget.
+
+    ops: object with directory(slug) -> [(channel_id, login)],
+    game(name) -> slug, channel_campaigns(channel_id) -> [campaign ids] and
+    details(ids) -> [campaign dicts]. Each call is one request (details: one
+    per id). Returns (login or None, summary text, requests used).
+    """
+    from TwitchChannelPointsMiner.classes.BadgeGames import (
+        DETAIL_RESERVE,
+        RequestBudget,
+        discover,
+    )
+
+    budget = RequestBudget()
+    memo = {}
+
+    def probe_directory(slug):  # discover() takes the budget itself
+        if slug not in memo:
+            memo[slug] = ops.directory(slug)
+        return memo[slug]
+
+    def directory(slug):  # for the planner: one request on a miss
+        if slug not in memo:
+            if not budget.take(1):
+                return []
+            memo[slug] = ops.directory(slug)
+        return memo[slug]
+
+    def details(ids):
+        ids = [cid for cid in ids if budget.take(1)]
+        return ops.details(ids) if ids else []
+
+    if planner.active is None and planner.free_timer(now) is None:
+        # Both timers are cooling down: no request at all.
+        planner.update([], configured, lambda slug: [], followed=followed, now=now)
+        return None, "both timers cooling down", 0
+
+    if planner.active is not None:
+        campaigns = details([planner.active["campaign_id"]])
+        summary = "tracking the active badge"
+    else:
+        games = game_list.games()
+        if not games:
+            planner.log_once(("no-list", int(now // 86400)),
+                             "Free badges: nothing eligible (no badge-game list)")
+            return None, "no badge-game list", budget.used
+        ids, probed, tried = discover(
+            games, game_list, ops.game, probe_directory, ops.channel_campaigns,
+            budget, planner.rng, sleep, skip_ids=skip_ids)
+        campaigns = details(ids[:DETAIL_RESERVE])
+        for campaign in campaigns:
+            if not campaign_eligible(campaign, now):
+                skip_ids.add(campaign["id"])
+        summary = (
+            f"{len(games)} games listed (fetched {game_list.fetched_text()}), "
+            f"tried {', '.join(tried) or 'none'}, {probed} channels probed, "
+            f"{len(ids)} campaigns found, {len(campaigns)} read"
+        )
+    login = planner.update(campaigns, configured, directory, followed=followed, now=now)
+    return login, summary, budget.used

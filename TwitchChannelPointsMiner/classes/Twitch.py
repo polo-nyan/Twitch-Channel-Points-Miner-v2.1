@@ -17,6 +17,7 @@ import validators
 
 from pathlib import Path
 from secrets import choice, token_hex
+from types import SimpleNamespace
 from typing import Dict, Any
 # from urllib.parse import quote
 # from base64 import urlsafe_b64decode
@@ -38,12 +39,16 @@ from TwitchChannelPointsMiner.classes.DropSchedule import (
     is_drop_relevant,
     lane_priority_enabled,
 )
+from TwitchChannelPointsMiner.classes.BadgeGames import (
+    CACHE_FILE as BADGE_GAMES_FILE,
+    BadgeGameList,
+)
 from TwitchChannelPointsMiner.classes.FreeBadges import (
     DIRECTORY_LIMIT,
     DOCUMENTS as FREE_BADGE_DOCUMENTS,
-    MAX_DETAIL_CAMPAIGNS,
     STATE_FILE as FREE_BADGE_STATE_FILE,
     FreeBadgePlanner,
+    free_badge_cycle,
     pick_slot,
 )
 from TwitchChannelPointsMiner.classes.HLSFetcher import HLSFetcher
@@ -88,6 +93,8 @@ class Twitch(object):
         "lane_watch",
         "free_badges",
         "free_badge_streamer",
+        "badge_games",
+        "free_badge_skip",
         "twilight_build_id_pattern",
         "gql_healer",
         "gql_healer_next_refresh",
@@ -120,6 +127,12 @@ class Twitch(object):
             os.path.join(Path().absolute(), "analytics", FREE_BADGE_STATE_FILE)
         )
         self.free_badge_streamer = None
+        # Games with free watch-time badges (streamdatabase, once a day).
+        self.badge_games = BadgeGameList(
+            os.path.join(Path().absolute(), "analytics", BADGE_GAMES_FILE),
+            session=requests,
+        )
+        self.free_badge_skip = set()  # campaign ids seen and not eligible
         # Real HLS segment downloads for drop progress (TCPM_HLS_SEGMENT_FETCH).
         self.hls_fetcher = HLSFetcher(self.playlist_url_for, user_agent=self.user_agent)
         self.twilight_build_id_pattern = re.compile(
@@ -1238,38 +1251,77 @@ class Twitch(object):
             if (edge.get("node") or {}).get("broadcaster")
         ]
 
-    def update_free_badges(self, streamers, dashboard):
-        """Pick or keep the free-badge channel. See classes/FreeBadges.py."""
+    def __free_badge_game(self, name):
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower().replace("'", "")).strip("-")
+        response = self.post_gql_request(
+            {
+                "operationName": "FreeBadgeGame",
+                "query": FREE_BADGE_DOCUMENTS["FreeBadgeGame"],
+                "variables": {"name": name, "slug": slug or name},
+            }
+        )
+        data = (response or {}).get("data") or {}
+        game = data.get("byName") or data.get("bySlug") or {}
+        return game.get("slug")
+
+    def __channel_campaign_ids(self, channel_id):
+        json_data = copy.deepcopy(GQLOperations.DropsHighlightService_AvailableDrops)
+        json_data["variables"] = {"channelID": channel_id}
+        response = self.post_gql_request(json_data)
+        channel = ((response or {}).get("data") or {}).get("channel") or {}
+        return [c["id"] for c in channel.get("viewerDropCampaigns") or [] if c.get("id")]
+
+    def __free_badge_details(self, ids):
+        """FreeBadgeCampaign details for `ids` (one batched request)."""
+        if not ids:
+            return []
+        user_id = f"{self.twitch_login.get_user_id()}"
+        response = self.post_gql_request(
+            [
+                {
+                    "operationName": "FreeBadgeCampaign",
+                    "query": FREE_BADGE_DOCUMENTS["FreeBadgeCampaign"],
+                    "variables": {"dropID": cid, "channelLogin": user_id},
+                }
+                for cid in ids
+            ]
+        )
+        campaigns = []
+        for r in response if isinstance(response, list) else []:
+            campaign = ((r.get("data") or {}).get("user") or {}).get("dropCampaign")
+            if campaign:
+                campaigns.append(campaign)
+        return campaigns
+
+    def update_free_badges(self, streamers, dashboard=None):
+        """Pick or keep the free-badge channel (FreeBadges.py). Campaigns are
+        found per channel for the games on the streamdatabase badge list
+        (BadgeGames.py): the dashboard list is empty for this login."""
         if not self.free_badges.enabled:
             return
-        ids = [c["id"] for c in dashboard or [] if c.get("id")][:MAX_DETAIL_CAMPAIGNS]
-        user_id = f"{self.twitch_login.get_user_id()}"
-        campaigns = []
-        for chunk in create_chunks(ids, 20):
-            response = self.post_gql_request(
-                [
-                    {
-                        "operationName": "FreeBadgeCampaign",
-                        "query": FREE_BADGE_DOCUMENTS["FreeBadgeCampaign"],
-                        "variables": {"dropID": cid, "channelLogin": user_id},
-                    }
-                    for cid in chunk
-                ]
-            )
-            for r in response if isinstance(response, list) else []:
-                campaign = ((r.get("data") or {}).get("user") or {}).get("dropCampaign")
-                if campaign:
-                    campaigns.append(campaign)
-        configured = [
-            (s.channel_id, s.stream.game_id())
-            for s in streamers
-            if s.is_online is True and s.settings.claim_drops is True
-        ]
-        login = self.free_badges.update(
-            campaigns,
-            configured,
-            self.__free_badge_directory,
-            followed=[s.username for s in streamers],
+        ops = SimpleNamespace(
+            directory=self.__free_badge_directory,
+            game=self.__free_badge_game,
+            channel_campaigns=self.__channel_campaign_ids,
+            details=self.__free_badge_details,
+        )
+        login, summary, used = free_badge_cycle(
+            self.free_badges,
+            self.badge_games,
+            ops,
+            [
+                (s.channel_id, s.stream.game_id())
+                for s in streamers
+                if s.is_online is True and s.settings.claim_drops is True
+            ],
+            [s.username for s in streamers],
+            time.time(),
+            self.free_badge_skip,
+        )
+        logger.info(
+            f"Free badges: {summary}; {used} requests; "
+            + (f"watching {login}" if login else "no pick"),
+            extra={"emoji": ":package:"},
         )
         current = self.free_badge_streamer
         if login is None:
