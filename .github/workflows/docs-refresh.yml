@@ -1,6 +1,6 @@
 # .github/workflows/docs-refresh.yml — Phase 2 of the autowiki rework.
 # Regenerates the committed .claude/** discovery copy AFTER a merge to the default branch,
-# then commits it back with [skip ci] so it cannot retrigger CI. Feature branches are never
+# then commits it back with the job's GITHUB_TOKEN, which starts no workflow run, so it cannot retrigger CI. Feature branches are never
 # touched (local sessions keep their own out-of-repo cache — Phase 1).
 #
 # Tooling source = smol-kitten/pawkit-docgen (PUBLIC mirror of pawkit's deterministic generator
@@ -11,41 +11,62 @@
 #       reject the push; those repos stay Phase-1-only until a bypassing app/token is wired.
 #   [ ] runner label matches (smol-kitten ARC = [self-hosted, linux]).
 #   [ ] runner has git, python3, and network to clone the public mirror + pip.
-#   [ ] confirm the [skip ci] commit does NOT spawn a second run (watch the Actions tab).
+#   [ ] confirm the docs commit does NOT spawn a second run (watch the Actions tab).
 # Tooling home is set to runner.temp (writable) so the runner never needs to create /home/claude.
+#
+# Supply chain (t-b2773d, declined on fleet-actions #3 until fixed): every action is pinned to a
+# commit SHA, the generator mirror to a commit (DOCGEN_REF below; bump it deliberately when the
+# generators change), pip installs only hash-pinned wheels (requirements.lock), and only the job
+# that pushes gets contents: write.
 name: docs-refresh
 on:
+  schedule:
+    - cron: '30 3 * * *'         # daily floor — see the concurrency note below
+  workflow_dispatch:
   push:
-    branches: [main]              # default branch only; adjust per-repo if master
+    branches: [main, master]      # either default name; the job's `if` drops the one that is not the default
     paths-ignore:
       - '.claude/**'              # belt-and-suspenders: a docs-only commit can't trigger us
       - 'AGENTS.md'
-permissions:
-  contents: write                 # to push the refresh commit back
+permissions: {}                   # nothing by default; the job below asks for what it needs
 concurrency:
   group: docs-refresh-${{ github.ref }}
-  cancel-in-progress: true
+  # NOT cancel-in-progress. With push-only triggering, cancel-in-progress means a BUSY repo
+  # never refreshes its docs at all: each push cancels the run the previous push started, so
+  # the job is perpetually cancelled and the artifact is never produced. Measured 2026-08-24 —
+  # 4 of the last 5 runs cancelled, and the committed .claude/symbols.json was 13 DAYS stale
+  # while GitHub showed the workflow "running". A cancelled run is not a failed run, so nothing
+  # alerts. Queueing is the right trade here: the job is idempotent (it regenerates from HEAD),
+  # so a short backlog is harmless and completion is what actually matters.
+  cancel-in-progress: false
 jobs:
   refresh:
-    # primary no-loop guard: skip if the head commit is our own refresh
-    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    # no-loop guard (belt-and-suspenders: a GITHUB_TOKEN push starts no run, and paths-ignore
+    # covers .claude/**): skip if the head commit is our own refresh or carries a skip marker.
+    # A push counts only on the repo's default branch (a filter cannot read it, so `branches` lists both
+    # names): before 2026-11-03 a master-default repo never ran on push (PoloPack, m-9946).
+    if: "${{ !startsWith(github.event.head_commit.message, 'chore(docs): refresh') && !contains(github.event.head_commit.message, '[skip ci]') && (github.event_name != 'push' || github.ref_name == github.event.repository.default_branch) }}"
     runs-on: [self-hosted, linux]
+    permissions:
+      contents: write             # to push the refresh commit back
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           fetch-depth: 0          # full history so incremental symbol index + patchnotes work
       - name: Checkout tooling (smol-kitten/pawkit-docgen — PUBLIC, no token needed)
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           repository: smol-kitten/pawkit-docgen
+          ref: 26ecf967655c69cae71ff870bd95421eab5d1ee2                    # DOCGEN_REF (2026-10-29)
           path: .tooling
+          persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0   # v7.1.0
         with:
           python-version: '3.12'
       - name: Install tooling deps
-        run: pip install -r .tooling/requirements.txt
+        run: pip install --require-hashes -r .tooling/requirements.lock
       - name: Regenerate + publish discovery copy
         env:
           TOOLING_SRC: .tooling
